@@ -48,12 +48,19 @@ type ChannelStats struct {
 }
 
 func NewChannelStats(c *Channel, clients []ClientStats) ChannelStats {
+	c.inFlightMutex.Lock()
+	inflight := len(c.inFlightMessages)
+	c.inFlightMutex.Unlock()
+	c.deferredMutex.Lock()
+	deferred := len(c.deferredMessages)
+	c.deferredMutex.Unlock()
+
 	return ChannelStats{
 		ChannelName:   c.name,
 		Depth:         c.Depth(),
 		BackendDepth:  c.backend.Depth(),
-		InFlightCount: len(c.inFlightMessages),
-		DeferredCount: len(c.deferredMessages),
+		InFlightCount: inflight,
+		DeferredCount: deferred,
 		MessageCount:  atomic.LoadUint64(&c.messageCount),
 		RequeueCount:  atomic.LoadUint64(&c.requeueCount),
 		TimeoutCount:  atomic.LoadUint64(&c.timeoutCount),
@@ -62,6 +69,11 @@ func NewChannelStats(c *Channel, clients []ClientStats) ChannelStats {
 
 		E2eProcessingLatency: c.e2eProcessingLatencyStream.Result(),
 	}
+}
+
+type PubCount struct {
+	Topic string `json:"topic"`
+	Count uint64 `json:"count"`
 }
 
 type ClientStats struct {
@@ -83,6 +95,8 @@ type ClientStats struct {
 	Authed          bool   `json:"authed,omitempty"`
 	AuthIdentity    string `json:"auth_identity,omitempty"`
 	AuthIdentityURL string `json:"auth_identity_url,omitempty"`
+
+	PubCounts []PubCount `json:"pub_counts,omitempty"`
 
 	TLS                           bool   `json:"tls"`
 	CipherSuite                   string `json:"tls_cipher_suite"`
@@ -159,6 +173,22 @@ func (n *NSQD) GetStats(topic string, channel string) []TopicStats {
 		topics = append(topics, NewTopicStats(t, channels))
 	}
 	return topics
+}
+
+func (n *NSQD) GetProducerStats() []ClientStats {
+	n.clientLock.RLock()
+	var producers []Client
+	for _, c := range n.clients {
+		if c.IsProducer() {
+			producers = append(producers, c)
+		}
+	}
+	n.clientLock.RUnlock()
+	producerStats := make([]ClientStats, 0, len(producers))
+	for _, p := range producers {
+		producerStats = append(producerStats, p.Stats())
+	}
+	return producerStats
 }
 
 type memStats struct {

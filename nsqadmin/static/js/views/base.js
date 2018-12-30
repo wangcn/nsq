@@ -6,6 +6,7 @@ var AppState = require('../app_state');
 
 var errorTemplate = require('./error.hbs');
 
+
 var BaseView = Backbone.View.extend({
     constructor: function(options) {
         // As of 1.10, Backbone no longer automatically attaches options passed
@@ -95,7 +96,7 @@ var BaseView = Backbone.View.extend({
             try {
                 var parsed = JSON.parse(jqXHR.responseText);
                 msg = parsed['message'];
-            } catch(err) {
+            } catch (err) {
                 msg = 'ERROR: failed to decode JSON - ' + err.message;
             }
         }

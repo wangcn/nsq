@@ -40,12 +40,12 @@ show_csv_report() {
 push_to_coveralls() {
     echo "Pushing coverage statistics to coveralls.io"
     # ignore failure to push - it happens
-    $HOME/gopath/bin/goveralls -coverprofile="$profile" \
-                               -service=travis-ci       \
-                               -ignore="nsqadmin/bindata.go" || true
+    $GOPATH/bin/goveralls -coverprofile="$profile" \
+                          -service=travis-ci       \
+                          -ignore="nsqadmin/bindata.go" || true
 }
 
-generate_cover_data $(go list ./...)
+generate_cover_data $(go list ./... | grep -v /vendor/)
 show_csv_report
 
 case "$1" in

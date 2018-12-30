@@ -71,6 +71,9 @@ NOTE: master is our *development* branch and may not be stable at all times.
 <a href="https://deis.com"><img src="http://nsq.io/static/img/deis_logo.svg" width="75" align="middle"/></a>&nbsp;&nbsp;
 <a href="https://wiredcraft.com"><img src="http://nsq.io/static/img/wiredcraft_logo.jpg" width="97" align="middle"/></a>&nbsp;&nbsp;
 <a href="https://sproutsocial.com"><img src="http://nsq.io/static/img/sproutsocial_logo.png" width="90" align="middle"/></a>&nbsp;&nbsp;
+<a href="http://fandom.wikia.com"><img src="http://nsq.io/static/img/fandom_logo.svg" width="100" align="middle"/></a>&nbsp;&nbsp;
+<a href="https://gitee.com"><img src="http://nsq.io/static/img/gitee_logo.svg" width="140" align="middle"/></a><br/>
+<a href="https://bytedance.com"><img src="https://bytedance.com/static/images/logo@2x.png" width="140" align="middle"/></a>&nbsp;&nbsp;
 
 ## Code of Conduct
 

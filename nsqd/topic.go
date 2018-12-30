@@ -24,6 +24,7 @@ type Topic struct {
 	channelMap        map[string]*Channel
 	backend           BackendQueue
 	memoryMsgChan     chan *Message
+	startChan         chan int
 	exitChan          chan int
 	channelUpdateChan chan int
 	waitGroup         util.WaitGroupWrapper
@@ -35,7 +36,7 @@ type Topic struct {
 	deleter        sync.Once
 
 	paused    int32
-	pauseChan chan bool
+	pauseChan chan int
 
 	ctx *context
 }
@@ -46,10 +47,12 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		name:              topicName,
 		channelMap:        make(map[string]*Channel),
 		memoryMsgChan:     make(chan *Message, ctx.nsqd.getOpts().MemQueueSize),
+		startChan:         make(chan int, 1),
 		exitChan:          make(chan int),
 		channelUpdateChan: make(chan int),
 		ctx:               ctx,
-		pauseChan:         make(chan bool),
+		paused:            0,
+		pauseChan:         make(chan int),
 		deleteCallback:    deleteCallback,
 		idFactory:         NewGUIDFactory(ctx.nsqd.getOpts().ID),
 	}
@@ -74,11 +77,18 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		)
 	}
 
-	t.waitGroup.Wrap(func() { t.messagePump() })
+	t.waitGroup.Wrap(t.messagePump)
 
 	t.ctx.nsqd.Notify(t)
 
 	return t
+}
+
+func (t *Topic) Start() {
+	select {
+	case t.startChan <- 1:
+	default:
+	}
 }
 
 // Exiting returns a boolean indicating if this topic is closed/exiting
@@ -184,9 +194,10 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 	if atomic.LoadInt32(&t.exitFlag) == 1 {
 		return errors.New("exiting")
 	}
-	for _, m := range msgs {
+	for i, m := range msgs {
 		err := t.put(m)
 		if err != nil {
+			atomic.AddUint64(&t.messageCount, uint64(i))
 			return err
 		}
 	}
@@ -226,17 +237,30 @@ func (t *Topic) messagePump() {
 	var memoryMsgChan chan *Message
 	var backendChan chan []byte
 
+	// do not pass messages before Start(), but avoid blocking Pause() or GetChannel()
+	for {
+		select {
+		case <-t.channelUpdateChan:
+			continue
+		case <-t.pauseChan:
+			continue
+		case <-t.exitChan:
+			goto exit
+		case <-t.startChan:
+		}
+		break
+	}
 	t.RLock()
 	for _, c := range t.channelMap {
 		chans = append(chans, c)
 	}
 	t.RUnlock()
-
-	if len(chans) > 0 {
+	if len(chans) > 0 && !t.IsPaused() {
 		memoryMsgChan = t.memoryMsgChan
 		backendChan = t.backend.ReadChan()
 	}
 
+	// main message loop
 	for {
 		select {
 		case msg = <-memoryMsgChan:
@@ -261,8 +285,8 @@ func (t *Topic) messagePump() {
 				backendChan = t.backend.ReadChan()
 			}
 			continue
-		case pause := <-t.pauseChan:
-			if pause || len(chans) == 0 {
+		case <-t.pauseChan:
+			if len(chans) == 0 || t.IsPaused() {
 				memoryMsgChan = nil
 				backendChan = nil
 			} else {
@@ -436,7 +460,7 @@ func (t *Topic) doPause(pause bool) error {
 	}
 
 	select {
-	case t.pauseChan <- pause:
+	case t.pauseChan <- 1:
 	case <-t.exitChan:
 	}
 
