@@ -1,5 +1,6 @@
 .godeps
-./build
+build
+vendor
 .cover/
 apps/nsqlookupd/nsqlookupd
 apps/nsqd/nsqd
@@ -49,3 +50,4 @@ profile
 
 # vim stuff
 *.sw[op]
+.idea
