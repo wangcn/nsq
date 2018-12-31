@@ -1,21 +1,19 @@
 PREFIX=/usr/local
-DESTDIR=
-GOFLAGS=
 BINDIR=${PREFIX}/bin
-
+DESTDIR=
 BLDDIR = build
+BLDFLAGS=
 EXT=
 ifeq (${GOOS},windows)
     EXT=.exe
 endif
 
-APPS = nsqd nsqlookupd nsqadmin nsq_pubsub nsq_to_nsq nsq_to_file nsq_to_http nsq_tail nsq_stat to_nsq
+APPS = nsqd nsqlookupd nsqadmin nsq_to_nsq nsq_to_file nsq_to_http nsq_tail nsq_stat to_nsq
 all: $(APPS)
 
 $(BLDDIR)/nsqd:        $(wildcard apps/nsqd/*.go       nsqd/*.go       nsq/*.go internal/*/*.go)
 $(BLDDIR)/nsqlookupd:  $(wildcard apps/nsqlookupd/*.go nsqlookupd/*.go nsq/*.go internal/*/*.go)
 $(BLDDIR)/nsqadmin:    $(wildcard apps/nsqadmin/*.go   nsqadmin/*.go nsqadmin/templates/*.go internal/*/*.go)
-$(BLDDIR)/nsq_pubsub:  $(wildcard apps/nsq_pubsub/*.go  nsq/*.go internal/*/*.go)
 $(BLDDIR)/nsq_to_nsq:  $(wildcard apps/nsq_to_nsq/*.go  nsq/*.go internal/*/*.go)
 $(BLDDIR)/nsq_to_file: $(wildcard apps/nsq_to_file/*.go nsq/*.go internal/*/*.go)
 $(BLDDIR)/nsq_to_http: $(wildcard apps/nsq_to_http/*.go nsq/*.go internal/*/*.go)
@@ -25,7 +23,7 @@ $(BLDDIR)/to_nsq:      $(wildcard apps/to_nsq/*.go               internal/*/*.go
 
 $(BLDDIR)/%:
 	@mkdir -p $(dir $@)
-	go build ${GOFLAGS} -o $@ ./apps/$*
+	go build ${BLDFLAGS} -o $@ ./apps/$*
 
 $(APPS): %: $(BLDDIR)/%
 

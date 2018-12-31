@@ -40,6 +40,7 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 
 	clientID := atomic.AddInt64(&p.ctx.nsqd.clientIDSequence, 1)
 	client := newClientV2(clientID, conn, p.ctx)
+	p.ctx.nsqd.AddClient(client.ID, client)
 
 	// synchronize the startup of messagePump in order
 	// to guarantee that it gets a chance to initialize
@@ -117,13 +118,14 @@ func (p *protocolV2) IOLoop(conn net.Conn) error {
 		client.Channel.RemoveClient(client.ID)
 	}
 
+	p.ctx.nsqd.RemoveClient(client.ID)
 	return err
 }
 
-func (p *protocolV2) SendMessage(client *clientV2, msg *Message, buf *bytes.Buffer) error {
+func (p *protocolV2) SendMessage(client *clientV2, msg *Message) error {
 	p.ctx.nsqd.logf(LOG_DEBUG, "PROTOCOL(V2): writing msg(%s) to client(%s) - %s", msg.ID, client, msg.Body)
+	var buf = &bytes.Buffer{}
 
-	buf.Reset()
 	_, err := msg.WriteTo(buf)
 	if err != nil {
 		return err
@@ -199,7 +201,6 @@ func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
 
 func (p *protocolV2) messagePump(client *clientV2, startedChan chan bool) {
 	var err error
-	var buf bytes.Buffer
 	var memoryMsgChan chan *Message
 	var backendMsgChan chan []byte
 	var subChannel *Channel
@@ -312,7 +313,7 @@ func (p *protocolV2) messagePump(client *clientV2, startedChan chan bool) {
 
 			subChannel.StartInFlightTimeout(msg, client.ID, msgTimeout)
 			client.SendingMessage()
-			err = p.SendMessage(client, msg, &buf)
+			err = p.SendMessage(client, msg)
 			if err != nil {
 				goto exit
 			}
@@ -325,7 +326,7 @@ func (p *protocolV2) messagePump(client *clientV2, startedChan chan bool) {
 
 			subChannel.StartInFlightTimeout(msg, client.ID, msgTimeout)
 			client.SendingMessage()
-			err = p.SendMessage(client, msg, &buf)
+			err = p.SendMessage(client, msg)
 			if err != nil {
 				goto exit
 			}
@@ -800,6 +801,8 @@ func (p *protocolV2) PUB(client *clientV2, params [][]byte) ([]byte, error) {
 		return nil, protocol.NewFatalClientErr(err, "E_PUB_FAILED", "PUB failed "+err.Error())
 	}
 
+	client.PublishedMessage(topicName, 1)
+
 	return okBytes, nil
 }
 
@@ -850,6 +853,8 @@ func (p *protocolV2) MPUB(client *clientV2, params [][]byte) ([]byte, error) {
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_MPUB_FAILED", "MPUB failed "+err.Error())
 	}
+
+	client.PublishedMessage(topicName, uint64(len(messages)))
 
 	return okBytes, nil
 }
@@ -912,6 +917,8 @@ func (p *protocolV2) DPUB(client *clientV2, params [][]byte) ([]byte, error) {
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_DPUB_FAILED", "DPUB failed "+err.Error())
 	}
+
+	client.PublishedMessage(topicName, 1)
 
 	return okBytes, nil
 }

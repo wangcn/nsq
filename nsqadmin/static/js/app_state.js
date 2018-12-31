@@ -13,7 +13,8 @@ var AppState = Backbone.Model.extend({
             'STATSD_PREFIX': STATSD_PREFIX,
             'NSQLOOKUPD': NSQLOOKUPD,
             'graph_interval': '2h',
-            'IS_ADMIN': IS_ADMIN
+            'IS_ADMIN': IS_ADMIN,
+            'BASE_PATH': BASE_PATH
         };
     },
 
@@ -23,15 +24,22 @@ var AppState = Backbone.Model.extend({
         });
 
         var qp = _.object(_.compact(_.map(window.location.search.slice(1).split('&'),
-            function(item) { if (item) { return item.split('='); } })));
+            function(item) { return item ? item.split('=') : false; })));
 
         var def = this.get('GRAPH_ENABLED') ? '2h' : 'off';
         var interval = qp['t'] || localStorage.getItem('graph_interval') || def;
         this.set('graph_interval', interval);
     },
 
-    url: function(url) {
-        return '/api' + url;
+    basePath: function(p) {
+        // if base path is / then don't prefix
+        var bp = this.get('BASE_PATH') === '/' ? '' : this.get('BASE_PATH');
+        // remove trailing /, but guarantee at least /
+        return (bp + p).replace(/\/$/, '') || '/';
+    },
+
+    apiPath: function(p) {
+        return this.basePath('/api' + p);
     }
 });
 

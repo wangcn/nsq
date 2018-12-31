@@ -21,7 +21,7 @@ var TopicView = BaseView.extend({
     initialize: function() {
         BaseView.prototype.initialize.apply(this, arguments);
         this.listenTo(AppState, 'change:graph_interval', this.render);
-        var isAdmin = this.model.get('isAdmin')
+        var isAdmin = this.model.get('isAdmin');
         this.model.fetch()
             .done(function(data) {
                 this.template = require('./topic.hbs');
@@ -43,7 +43,7 @@ var TopicView = BaseView.extend({
             }
             if (action === 'delete') {
                 $.ajax(this.model.url(), {'method': 'DELETE'})
-                    .done(function() { window.location = '/'; });
+                    .done(function() { window.location = AppState.basePath('/'); });
             } else {
                 $.post(this.model.url(), JSON.stringify({'action': action}))
                     .done(function() { window.location.reload(true); })

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"sync"
 	"sync/atomic"
 
@@ -130,9 +131,22 @@ func New(opts *Options) *NSQAdmin {
 		}
 	}
 
+	opts.BasePath = normalizeBasePath(opts.BasePath)
+
 	n.logf(LOG_INFO, version.String("nsqadmin"))
 
 	return n
+}
+
+func normalizeBasePath(p string) string {
+	if len(p) == 0 {
+		return "/"
+	}
+	// add leading slash
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	return path.Clean(p)
 }
 
 func (n *NSQAdmin) getOpts() *Options {
@@ -144,8 +158,6 @@ func (n *NSQAdmin) swapOpts(opts *Options) {
 }
 
 func (n *NSQAdmin) RealHTTPAddr() *net.TCPAddr {
-	n.RLock()
-	defer n.RUnlock()
 	return n.httpListener.Addr().(*net.TCPAddr)
 }
 
@@ -174,14 +186,12 @@ func (n *NSQAdmin) Main() {
 		n.logf(LOG_FATAL, "listen (%s) failed - %s", n.getOpts().HTTPAddress, err)
 		os.Exit(1)
 	}
-	n.Lock()
 	n.httpListener = httpListener
-	n.Unlock()
 	httpServer := NewHTTPServer(&Context{n})
 	n.waitGroup.Wrap(func() {
 		http_api.Serve(n.httpListener, http_api.CompressHandler(httpServer), "HTTP", n.logf)
 	})
-	n.waitGroup.Wrap(func() { n.handleAdminActions() })
+	n.waitGroup.Wrap(n.handleAdminActions)
 }
 
 func (n *NSQAdmin) Exit() {
