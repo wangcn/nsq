@@ -185,6 +185,8 @@ func (p *protocolV2) Exec(client *clientV2, params [][]byte) ([]byte, error) {
 		return p.MPUB(client, params)
 	case bytes.Equal(params[0], []byte("DPUB")):
 		return p.DPUB(client, params)
+	case bytes.Equal(params[0], []byte("LVDPUB")):
+		return p.LVDPUB(client, params)
 	case bytes.Equal(params[0], []byte("NOP")):
 		return p.NOP(client, params)
 	case bytes.Equal(params[0], []byte("TOUCH")):
@@ -914,6 +916,72 @@ func (p *protocolV2) DPUB(client *clientV2, params [][]byte) ([]byte, error) {
 	msg := NewMessage(topic.GenerateID(), messageBody)
 	msg.deferred = timeoutDuration
 	err = topic.PutMessage(msg)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_DPUB_FAILED", "DPUB failed "+err.Error())
+	}
+
+	client.PublishedMessage(topicName, 1)
+
+	return okBytes, nil
+}
+
+func (p *protocolV2) LVDPUB(client *clientV2, params [][]byte) ([]byte, error) {
+	var err error
+
+	validLevel := map[uint64]int64 {
+		1: 1,
+		10: 60,
+	}
+
+	if len(params) < 3 {
+		return nil, protocol.NewFatalClientErr(nil, "E_INVALID", "DPUB insufficient number of parameters")
+	}
+
+	topicName := string(params[1])
+	if !protocol.IsValidTopicName(topicName) {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_TOPIC",
+			fmt.Sprintf("DPUB topic name %q is not valid", topicName))
+	}
+
+	delayLevel, err := protocol.ByteToBase10(params[2])
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_INVALID",
+			fmt.Sprintf("DPUB could not parse timeout %s", params[2]))
+	}
+	_, ok := validLevel[delayLevel]
+	if !ok {
+		return nil, protocol.NewFatalClientErr(err, "E_INVALID",
+			fmt.Sprintf("DPUB could not parse timeout %s", params[2]))
+	}
+
+	bodyLen, err := readLen(client.Reader, client.lenSlice)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_BAD_MESSAGE", "DPUB failed to read message body size")
+	}
+
+	if bodyLen <= 0 {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_MESSAGE",
+			fmt.Sprintf("DPUB invalid message body size %d", bodyLen))
+	}
+
+	if int64(bodyLen) > p.ctx.nsqd.getOpts().MaxMsgSize {
+		return nil, protocol.NewFatalClientErr(nil, "E_BAD_MESSAGE",
+			fmt.Sprintf("DPUB message too big %d > %d", bodyLen, p.ctx.nsqd.getOpts().MaxMsgSize))
+	}
+
+	messageBody := make([]byte, bodyLen)
+	_, err = io.ReadFull(client.Reader, messageBody)
+	if err != nil {
+		return nil, protocol.NewFatalClientErr(err, "E_BAD_MESSAGE", "DPUB failed to read message body")
+	}
+
+	if err := p.CheckAuth(client, "DPUB", topicName, ""); err != nil {
+		return nil, err
+	}
+
+	topic := p.ctx.nsqd.GetTopic(topicName)
+	msg := NewMessage(topic.GenerateID(), messageBody)
+	err = topic.PutLvDeferMessage(msg, int64(delayLevel))
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_DPUB_FAILED", "DPUB failed "+err.Error())
 	}

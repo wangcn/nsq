@@ -58,6 +58,7 @@ func newHTTPServer(ctx *context, tlsEnabled bool, tlsRequired bool) *httpServer 
 
 	// v1 negotiate
 	router.Handle("POST", "/pub", http_api.Decorate(s.doPUB, http_api.V1))
+	router.Handle("POST", "/lvdpub", http_api.Decorate(s.doLVDPUB, http_api.V1))
 	router.Handle("POST", "/mpub", http_api.Decorate(s.doMPUB, http_api.V1))
 	router.Handle("GET", "/stats", http_api.Decorate(s.doStats, log, http_api.V1))
 
@@ -225,6 +226,51 @@ func (s *httpServer) doPUB(w http.ResponseWriter, req *http.Request, ps httprout
 	msg := NewMessage(topic.GenerateID(), body)
 	msg.deferred = deferred
 	err = topic.PutMessage(msg)
+	if err != nil {
+		return nil, http_api.Err{503, "EXITING"}
+	}
+
+	return "OK", nil
+}
+
+func (s *httpServer) doLVDPUB(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
+	// TODO: one day I'd really like to just error on chunked requests
+	// to be able to fail "too big" requests before we even read
+
+	if req.ContentLength > s.ctx.nsqd.getOpts().MaxMsgSize {
+		return nil, http_api.Err{413, "MSG_TOO_BIG"}
+	}
+
+	// add 1 so that it's greater than our max when we test for it
+	// (LimitReader returns a "fake" EOF)
+	readMax := s.ctx.nsqd.getOpts().MaxMsgSize + 1
+	body, err := ioutil.ReadAll(io.LimitReader(req.Body, readMax))
+	if err != nil {
+		return nil, http_api.Err{500, "INTERNAL_ERROR"}
+	}
+	if int64(len(body)) == readMax {
+		return nil, http_api.Err{413, "MSG_TOO_BIG"}
+	}
+	if len(body) == 0 {
+		return nil, http_api.Err{400, "MSG_EMPTY"}
+	}
+
+	reqParams, topic, err := s.getTopicFromQuery(req)
+	if err != nil {
+		return nil, err
+	}
+
+
+	var di int64
+	if ds, ok := reqParams["defer"]; ok {
+		di, err = strconv.ParseInt(ds[0], 10, 64)
+		if err != nil {
+			return nil, http_api.Err{400, "INVALID_DEFER"}
+		}
+	}
+
+	msg := NewMessage(topic.GenerateID(), body)
+	err = topic.PutLvDeferMessage(msg, di)
 	if err != nil {
 		return nil, http_api.Err{503, "EXITING"}
 	}

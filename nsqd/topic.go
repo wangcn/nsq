@@ -23,6 +23,7 @@ type Topic struct {
 	name              string
 	channelMap        map[string]*Channel
 	backend           BackendQueue
+	lvDeferBackend    map[int64]BackendQueue
 	memoryMsgChan     chan *Message
 	startChan         chan int
 	exitChan          chan int
@@ -75,6 +76,30 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 			ctx.nsqd.getOpts().SyncTimeout,
 			dqLogf,
 		)
+		t.lvDeferBackend = map[int64]BackendQueue{
+			1: NewLvDeferQueue(
+				1,
+				topicName+"#level_1",
+				ctx.nsqd.getOpts().DataPath,
+				ctx.nsqd.getOpts().MaxBytesPerFile,
+				int32(minValidMsgLength),
+				int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
+				ctx.nsqd.getOpts().SyncEvery,
+				ctx.nsqd.getOpts().SyncTimeout,
+				dqLogf,
+			),
+			10: NewLvDeferQueue(
+				10,
+				topicName+"#level_10",
+				ctx.nsqd.getOpts().DataPath,
+				ctx.nsqd.getOpts().MaxBytesPerFile,
+				int32(minValidMsgLength),
+				int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
+				ctx.nsqd.getOpts().SyncEvery,
+				ctx.nsqd.getOpts().SyncTimeout,
+				dqLogf,
+			),
+		}
 	}
 
 	t.waitGroup.Wrap(t.messagePump)
@@ -223,6 +248,20 @@ func (t *Topic) put(m *Message) error {
 	return nil
 }
 
+func (t *Topic) lvPut(m *Message, deferLevel int64) error {
+	b := bufferPoolGet()
+	err := writeMessageToBackend(b, m, t.lvDeferBackend[deferLevel])
+	bufferPoolPut(b)
+	t.ctx.nsqd.SetHealth(err)
+	if err != nil {
+		t.ctx.nsqd.logf(LOG_ERROR,
+			"TOPIC(%s) ERROR: failed to write message to backend - %s",
+			t.name, err)
+		return err
+	}
+	return nil
+}
+
 func (t *Topic) Depth() int64 {
 	return int64(len(t.memoryMsgChan)) + t.backend.Depth()
 }
@@ -236,6 +275,7 @@ func (t *Topic) messagePump() {
 	var chans []*Channel
 	var memoryMsgChan chan *Message
 	var backendChan chan []byte
+	var lvBackendChan chan []byte
 
 	// do not pass messages before Start(), but avoid blocking Pause() or GetChannel()
 	for {
@@ -258,6 +298,7 @@ func (t *Topic) messagePump() {
 	if len(chans) > 0 && !t.IsPaused() {
 		memoryMsgChan = t.memoryMsgChan
 		backendChan = t.backend.ReadChan()
+		lvBackendChan = t.lvDeferBackend[1].ReadChan()
 	}
 
 	// main message loop
@@ -265,6 +306,12 @@ func (t *Topic) messagePump() {
 		select {
 		case msg = <-memoryMsgChan:
 		case buf = <-backendChan:
+			msg, err = decodeMessage(buf)
+			if err != nil {
+				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
+				continue
+			}
+		case buf = <-lvBackendChan:
 			msg, err = decodeMessage(buf)
 			if err != nil {
 				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
@@ -479,4 +526,19 @@ retry:
 		goto retry
 	}
 	return id.Hex()
+}
+
+// PutLvDeferMessage writes a Message to the queue
+func (t *Topic) PutLvDeferMessage(m *Message, deferLevel int64) error {
+	t.RLock()
+	defer t.RUnlock()
+	if atomic.LoadInt32(&t.exitFlag) == 1 {
+		return errors.New("exiting")
+	}
+	err := t.lvPut(m, deferLevel)
+	if err != nil {
+		return err
+	}
+	atomic.AddUint64(&t.messageCount, 1)
+	return nil
 }

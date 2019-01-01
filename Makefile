@@ -8,7 +8,8 @@ ifeq (${GOOS},windows)
     EXT=.exe
 endif
 
-APPS = nsqd nsqlookupd nsqadmin nsq_to_nsq nsq_to_file nsq_to_http nsq_tail nsq_stat to_nsq
+#APPS = nsqd nsqlookupd nsqadmin nsq_to_nsq nsq_to_file nsq_to_http nsq_tail nsq_stat to_nsq
+APPS = nsqd nsqlookupd nsqadmin nsq_tail
 all: $(APPS)
 
 $(BLDDIR)/nsqd:        $(wildcard apps/nsqd/*.go       nsqd/*.go       nsq/*.go internal/*/*.go)
