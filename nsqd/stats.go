@@ -9,24 +9,34 @@ import (
 )
 
 type TopicStats struct {
-	TopicName    string         `json:"topic_name"`
-	Channels     []ChannelStats `json:"channels"`
-	Depth        int64          `json:"depth"`
-	BackendDepth int64          `json:"backend_depth"`
-	MessageCount uint64         `json:"message_count"`
-	Paused       bool           `json:"paused"`
+	TopicName           string         `json:"topic_name"`
+	Channels            []ChannelStats `json:"channels"`
+	Depth               int64          `json:"depth"`
+	BackendDepth        int64          `json:"backend_depth"`
+	LvDeferBackendDepth []int64        `json:"lv_defer_backend_depth"`
+	MessageCount        uint64         `json:"message_count"`
+	Paused              bool           `json:"paused"`
 
 	E2eProcessingLatency *quantile.Result `json:"e2e_processing_latency"`
 }
 
 func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
+	lvDeferDepth := make([]int64, 18, 18)
+	for i := 0; i < 18; i++ {
+		if q, ok := t.lvDeferBackend[int64(i+1)]; ok {
+			lvDeferDepth[i] = q.Depth()
+		} else {
+			lvDeferDepth[i] = 0
+		}
+	}
 	return TopicStats{
-		TopicName:    t.name,
-		Channels:     channels,
-		Depth:        t.Depth(),
-		BackendDepth: t.backend.Depth(),
-		MessageCount: atomic.LoadUint64(&t.messageCount),
-		Paused:       t.IsPaused(),
+		TopicName:           t.name,
+		Channels:            channels,
+		Depth:               t.Depth(),
+		BackendDepth:        t.backend.Depth(),
+		LvDeferBackendDepth: lvDeferDepth,
+		MessageCount:        atomic.LoadUint64(&t.messageCount),
+		Paused:              t.IsPaused(),
 
 		E2eProcessingLatency: t.AggregateChannelE2eProcessingLatency().Result(),
 	}

@@ -104,11 +104,13 @@ type diskQueue struct {
 	curMsg *Message
 
 	logf AppLogFunc
+
+	mainBackend BackendQueue
 }
 
 // New instantiates an instance of diskQueue, retrieving metadata
 // from the filesystem and starting the read ahead goroutine
-func NewLvDeferQueue(deferLv int64, name string, dataPath string, maxBytesPerFile int64,
+func NewLvDeferQueue(mainBackend BackendQueue, deferLv int64, name string, dataPath string, maxBytesPerFile int64,
 	minMsgSize int32, maxMsgSize int32,
 	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) BackendQueue {
 	d := diskQueue{
@@ -117,7 +119,7 @@ func NewLvDeferQueue(deferLv int64, name string, dataPath string, maxBytesPerFil
 		maxBytesPerFile:   maxBytesPerFile,
 		minMsgSize:        minMsgSize,
 		maxMsgSize:        maxMsgSize,
-		readChan:          make(chan []byte),
+		readChan:          make(chan []byte, 1),
 		writeChan:         make(chan []byte),
 		writeResponseChan: make(chan error),
 		emptyChan:         make(chan int),
@@ -128,6 +130,7 @@ func NewLvDeferQueue(deferLv int64, name string, dataPath string, maxBytesPerFil
 		syncTimeout:       syncTimeout,
 		logf:              logf,
 		deferDuration:     DeferLevel[deferLv],
+		mainBackend:       mainBackend,
 	}
 
 	// no need to lock here, nothing else could possibly be touching this instance
@@ -634,19 +637,20 @@ func (d *diskQueue) ioLoop() {
 					}
 				}
 				d.curMsg, err = decodeMessage(dataRead)
+				fmt.Println(d.curMsg.Timestamp, "\tdddddddddjojojo")
 				if err != nil {
 					d.logf(ERROR, "failed to decode message - %s", err)
 					continue
 				}
-				if d.curMsg.Timestamp + d.deferDuration <= time.Now().UnixNano() {
+				if d.curMsg.Timestamp+d.deferDuration <= time.Now().UnixNano() {
 					r = d.readChan
 				}
 			}
 		} else {
 			fmt.Println(string(d.curMsg.Body))
-			fmt.Println(d.curMsg.Timestamp, d.deferDuration, d.curMsg.Timestamp + d.deferDuration <= time.Now().UnixNano())
-			fmt.Println(time.Unix(d.curMsg.Timestamp / 1000000000, 0).Format("2006-01-02 15:04:05"))
-			if d.curMsg.Timestamp + d.deferDuration <= time.Now().UnixNano() {
+			fmt.Println("have\t", d.curMsg.Timestamp, d.deferDuration, d.curMsg.Timestamp+d.deferDuration <= time.Now().UnixNano())
+			fmt.Println(time.Unix(d.curMsg.Timestamp/1000000000, 0).Format("2006-01-02 15:04:05"))
+			if d.curMsg.Timestamp+d.deferDuration <= time.Now().UnixNano() {
 				r = d.readChan
 			}
 		}
@@ -657,6 +661,7 @@ func (d *diskQueue) ioLoop() {
 		// in a select are skipped, we set r to d.readChan only when there is data to read
 		case r <- dataRead:
 			fmt.Println("iuiuuuuuuuuuuuuiiiiiiiii\t", string(dataRead))
+			d.mainBackend.Put(<-r)
 			count++
 			d.curMsg = nil
 			// moveForward sets needSync flag if a file is removed

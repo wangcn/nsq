@@ -78,6 +78,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		)
 		t.lvDeferBackend = map[int64]BackendQueue{
 			1: NewLvDeferQueue(
+				t.backend,
 				1,
 				topicName+"#level_1",
 				ctx.nsqd.getOpts().DataPath,
@@ -89,6 +90,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 				dqLogf,
 			),
 			10: NewLvDeferQueue(
+				t.backend,
 				10,
 				topicName+"#level_10",
 				ctx.nsqd.getOpts().DataPath,
@@ -275,7 +277,7 @@ func (t *Topic) messagePump() {
 	var chans []*Channel
 	var memoryMsgChan chan *Message
 	var backendChan chan []byte
-	var lvBackendChan chan []byte
+	//var lvBackendChan chan []byte
 
 	// do not pass messages before Start(), but avoid blocking Pause() or GetChannel()
 	for {
@@ -298,7 +300,7 @@ func (t *Topic) messagePump() {
 	if len(chans) > 0 && !t.IsPaused() {
 		memoryMsgChan = t.memoryMsgChan
 		backendChan = t.backend.ReadChan()
-		lvBackendChan = t.lvDeferBackend[1].ReadChan()
+		//lvBackendChan = t.lvDeferBackend[10].ReadChan()
 	}
 
 	// main message loop
@@ -311,12 +313,12 @@ func (t *Topic) messagePump() {
 				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
 				continue
 			}
-		case buf = <-lvBackendChan:
-			msg, err = decodeMessage(buf)
-			if err != nil {
-				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
-				continue
-			}
+		//case buf = <-lvBackendChan:
+		//	msg, err = decodeMessage(buf)
+		//	if err != nil {
+		//		t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
+		//		continue
+		//	}
 		case <-t.channelUpdateChan:
 			chans = chans[:0]
 			t.RLock()
