@@ -23,22 +23,24 @@ type TopicStats struct {
 }
 
 type LvDeferTopicStats struct {
-	Level        int64  `json:"level"`
-	TopicName    string `json:"topic_name"`
-	Depth        int64  `json:"depth"`
-	BackendDepth int64  `json:"backend_depth"`
-	MessageCount uint64 `json:"message_count"`
+	Level         int64  `json:"level"`
+	TopicName     string `json:"topic_name"`
+	Depth         int64  `json:"depth"`
+	BackendDepth  int64  `json:"backend_depth"`
+	MessageCount  uint64 `json:"message_count"`
+	DeferDuration int64  `json:"defer_duration"`
 }
 
 func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
 	lvDeferDepth := make([]LvDeferTopicStats, 18, 18)
-	for idx, item := range t.lvDeferBackend {
+	for idx, item := range t.lvDeferTopic {
 		lvDeferDepth[idx] = LvDeferTopicStats{
-			Level:        int64(idx),
-			TopicName:    item.name,
-			Depth:        item.backend.Depth(),
-			BackendDepth: item.backend.Depth(),
-			MessageCount: atomic.LoadUint64(&item.messageCount),
+			Level:         int64(idx),
+			TopicName:     item.name,
+			Depth:         item.backend.Depth(),
+			BackendDepth:  item.backend.Depth(),
+			MessageCount:  atomic.LoadUint64(&item.messageCount),
+			DeferDuration: DeferLevel[item.level],
 		}
 	}
 	return TopicStats{

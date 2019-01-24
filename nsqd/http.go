@@ -261,10 +261,13 @@ func (s *httpServer) doLVDPUB(w http.ResponseWriter, req *http.Request, ps httpr
 	}
 
 
-	var di int64
+	var di uint64
 	if ds, ok := reqParams["defer"]; ok {
-		di, err = strconv.ParseInt(ds[0], 10, 64)
+		di, err = strconv.ParseUint(ds[0], 10, 64)
 		if err != nil {
+			return nil, http_api.Err{400, "INVALID_DEFER"}
+		}
+		if di < 1 || di > uint64(len(DeferLevel)) {
 			return nil, http_api.Err{400, "INVALID_DEFER"}
 		}
 	}

@@ -307,9 +307,10 @@ func (c ProducersByHost) Less(i, j int) bool {
 }
 
 type LvDeferStats struct {
-	Level        int64 `json:"level"`
-	Depth        int64 `json:"depth"`
-	MemDepth     int64 `json:"mem_depth"`
-	BackendDepth int64 `json:"backend_depth"`
-	MessageCount int64 `json:"message_count"`
+	Level         int64 `json:"level"`
+	Depth         int64 `json:"depth"`
+	MemDepth      int64 `json:"mem_depth"`
+	BackendDepth  int64 `json:"backend_depth"`
+	MessageCount  int64 `json:"message_count"`
+	DeferDuration int64 `json:"defer_duration"`
 }

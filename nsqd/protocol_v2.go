@@ -981,7 +981,7 @@ func (p *protocolV2) LVDPUB(client *clientV2, params [][]byte) ([]byte, error) {
 
 	topic := p.ctx.nsqd.GetTopic(topicName)
 	msg := NewMessage(topic.GenerateID(), messageBody)
-	err = topic.PutLvDeferMessage(msg, int64(delayLevel))
+	err = topic.PutLvDeferMessage(msg, delayLevel)
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_DPUB_FAILED", "DPUB failed "+err.Error())
 	}

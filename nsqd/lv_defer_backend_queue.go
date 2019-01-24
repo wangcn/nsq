@@ -47,10 +47,27 @@ func (l LogLevel) String() string {
 	panic("invalid LogLevel")
 }
 
+//1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h
 var (
-	DeferLevel = map[int64]int64{
-		1:  5 * 1000 * 1000 * 1000,
-		10: 10 * 1000 * 1000 * 1000,
+	DeferLevel = []int64{
+		1 * 1000 * 1000 * 1000,        // 1s
+		5 * 1000 * 1000 * 1000,        // 5s
+		10 * 1000 * 1000 * 1000,       // 10s
+		30 * 1000 * 1000 * 1000,       // 30s
+		1 * 60 * 1000 * 1000 * 1000,   // 1m
+		2 * 60 * 1000 * 1000 * 1000,   // 2m
+		3 * 60 * 1000 * 1000 * 1000,   // 3m
+		4 * 60 * 1000 * 1000 * 1000,   // 4m
+		5 * 60 * 1000 * 1000 * 1000,   // 5m
+		6 * 60 * 1000 * 1000 * 1000,   // 6m
+		7 * 60 * 1000 * 1000 * 1000,   // 7m
+		8 * 60 * 1000 * 1000 * 1000,   // 8m
+		9 * 60 * 1000 * 1000 * 1000,   // 9m
+		10 * 60 * 1000 * 1000 * 1000,  // 10m
+		20 * 60 * 1000 * 1000 * 1000,  // 20m
+		30 * 60 * 1000 * 1000 * 1000,  // 30m
+		1 * 3600 * 1000 * 1000 * 1000, // 1h
+		2 * 3600 * 1000 * 1000 * 1000, // 2h
 	}
 )
 
@@ -110,7 +127,7 @@ type diskQueue struct {
 
 // New instantiates an instance of diskQueue, retrieving metadata
 // from the filesystem and starting the read ahead goroutine
-func NewLvDeferQueue(mainTopic *Topic, deferLv int64, name string, dataPath string, maxBytesPerFile int64,
+func NewLvDeferQueue(mainTopic *Topic, deferLv uint64, name string, dataPath string, maxBytesPerFile int64,
 	minMsgSize int32, maxMsgSize int32,
 	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) BackendQueue {
 	d := diskQueue{
@@ -657,6 +674,7 @@ func (d *diskQueue) ioLoop() {
 			d.mainTopic.backend.Put(<-r)
 			count++
 			atomic.AddUint64(&d.mainTopic.messageCount, 1)
+			atomic.AddUint64(&d.mainTopic.messageBytes, uint64(len(dataRead)))
 			d.curMsg = nil
 			// moveForward sets needSync flag if a file is removed
 			d.moveForward()

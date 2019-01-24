@@ -25,7 +25,7 @@ type Topic struct {
 	name              string
 	channelMap        map[string]*Channel
 	backend           BackendQueue
-	lvDeferBackend    []*LvDeferTopic
+	lvDeferTopic      []*LvDeferTopic
 	memoryMsgChan     chan *Message
 	startChan         chan int
 	exitChan          chan int
@@ -45,6 +45,7 @@ type Topic struct {
 }
 
 type LvDeferTopic struct {
+	level        uint64
 	messageCount uint64
 	name         string
 	backend      BackendQueue
@@ -86,12 +87,13 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		)
 		for i := 0; i < 18; i++ {
 			topicName := topicName + fmt.Sprintf("#level_%d", i+1)
-			t.lvDeferBackend = append(t.lvDeferBackend, &LvDeferTopic{
+			t.lvDeferTopic = append(t.lvDeferTopic, &LvDeferTopic{
+				level:        uint64(i),
 				messageCount: 0,
 				name:         topicName,
 				backend: NewLvDeferQueue(
 					t,
-					int64(i+1),
+					uint64(i),
 					topicName,
 					ctx.nsqd.getOpts().DataPath,
 					ctx.nsqd.getOpts().MaxBytesPerFile,
@@ -259,9 +261,9 @@ func (t *Topic) put(m *Message) error {
 	return nil
 }
 
-func (t *Topic) lvPut(m *Message, deferLevel int64) error {
+func (t *Topic) lvPut(m *Message, deferLevel uint64) error {
 	b := bufferPoolGet()
-	err := writeMessageToBackend(b, m, t.lvDeferBackend[deferLevel].backend)
+	err := writeMessageToBackend(b, m, t.lvDeferTopic[deferLevel].backend)
 	bufferPoolPut(b)
 	t.ctx.nsqd.SetHealth(err)
 	if err != nil {
@@ -422,6 +424,10 @@ func (t *Topic) exit(deleted bool) error {
 		}
 		t.Unlock()
 
+		for _, v := range t.lvDeferTopic {
+			v.backend.Empty()
+			v.backend.Delete()
+		}
 		// empty the queue (deletes the backend files, too)
 		t.Empty()
 		return t.backend.Delete()
@@ -540,7 +546,7 @@ retry:
 }
 
 // PutLvDeferMessage writes a Message to the queue
-func (t *Topic) PutLvDeferMessage(m *Message, deferLevel int64) error {
+func (t *Topic) PutLvDeferMessage(m *Message, deferLevel uint64) error {
 	t.RLock()
 	defer t.RUnlock()
 	if atomic.LoadInt32(&t.exitFlag) == 1 {
@@ -550,6 +556,6 @@ func (t *Topic) PutLvDeferMessage(m *Message, deferLevel int64) error {
 	if err != nil {
 		return err
 	}
-	atomic.AddUint64(&t.lvDeferBackend[deferLevel].messageCount, 1)
+	atomic.AddUint64(&t.lvDeferTopic[deferLevel].messageCount, 1)
 	return nil
 }

@@ -96,7 +96,7 @@
                     {{#each this.lv_defer_backends as |item| }}
                     <tr>
                         <td>
-                            defer level {{eval '{{index}}+1'}}
+                            defer level {{eval '{{index}}+1'}}({{time_human item.defer_duration}})
                         </td>
                         <td>{{commafy item.depth}}</td>
                         <td>{{commafy item.depth}}</td>

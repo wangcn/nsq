@@ -312,3 +312,17 @@ Handlebars.registerHelper('eval', function(str, options){
         console.log(str,'--Handlerbars Helper "eval" deal with wrong expression!');
     }
 });
+
+Handlebars.registerHelper('time_human', function(n){
+    var timeSecond = 1000 * 1000 * 1000;
+    var second = n / timeSecond;
+    if (second < 60) {
+        return second + 's'
+    }
+    var minute = n / timeSecond / 60;
+    if (minute < 60) {
+        return minute + 'm'
+    }
+    var hour = n / timeSecond / 3600;
+    return hour + 'h'
+});
