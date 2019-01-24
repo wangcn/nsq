@@ -105,12 +105,12 @@ type diskQueue struct {
 
 	logf AppLogFunc
 
-	mainBackend BackendQueue
+	mainTopic *Topic
 }
 
 // New instantiates an instance of diskQueue, retrieving metadata
 // from the filesystem and starting the read ahead goroutine
-func NewLvDeferQueue(mainBackend BackendQueue, deferLv int64, name string, dataPath string, maxBytesPerFile int64,
+func NewLvDeferQueue(mainTopic *Topic, deferLv int64, name string, dataPath string, maxBytesPerFile int64,
 	minMsgSize int32, maxMsgSize int32,
 	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) BackendQueue {
 	d := diskQueue{
@@ -130,7 +130,7 @@ func NewLvDeferQueue(mainBackend BackendQueue, deferLv int64, name string, dataP
 		syncTimeout:       syncTimeout,
 		logf:              logf,
 		deferDuration:     DeferLevel[deferLv],
-		mainBackend:       mainBackend,
+		mainTopic:         mainTopic,
 	}
 
 	// no need to lock here, nothing else could possibly be touching this instance
@@ -624,7 +624,6 @@ func (d *diskQueue) ioLoop() {
 		}
 
 		r = nil
-		fmt.Println("read chan before\t", r)
 		if d.curMsg == nil {
 			if (d.readFileNum < d.writeFileNum) || (d.readPos < d.writePos) {
 				if d.nextReadPos == d.readPos {
@@ -637,7 +636,6 @@ func (d *diskQueue) ioLoop() {
 					}
 				}
 				d.curMsg, err = decodeMessage(dataRead)
-				fmt.Println(d.curMsg.Timestamp, "\tdddddddddjojojo")
 				if err != nil {
 					d.logf(ERROR, "failed to decode message - %s", err)
 					continue
@@ -647,22 +645,18 @@ func (d *diskQueue) ioLoop() {
 				}
 			}
 		} else {
-			fmt.Println(string(d.curMsg.Body))
-			fmt.Println("have\t", d.curMsg.Timestamp, d.deferDuration, d.curMsg.Timestamp+d.deferDuration <= time.Now().UnixNano())
-			fmt.Println(time.Unix(d.curMsg.Timestamp/1000000000, 0).Format("2006-01-02 15:04:05"))
 			if d.curMsg.Timestamp+d.deferDuration <= time.Now().UnixNano() {
 				r = d.readChan
 			}
 		}
-		fmt.Println("read chan after\t", r)
 
 		select {
 		// the Go channel spec dictates that nil channel operations (read or write)
 		// in a select are skipped, we set r to d.readChan only when there is data to read
 		case r <- dataRead:
-			fmt.Println("iuiuuuuuuuuuuuuiiiiiiiii\t", string(dataRead))
-			d.mainBackend.Put(<-r)
+			d.mainTopic.backend.Put(<-r)
 			count++
+			atomic.AddUint64(&d.mainTopic.messageCount, 1)
 			d.curMsg = nil
 			// moveForward sets needSync flag if a file is removed
 			d.moveForward()

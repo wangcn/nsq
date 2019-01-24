@@ -100,6 +100,7 @@ type TopicStats struct {
 	BackendDepth int64           `json:"backend_depth"`
 	MessageCount int64           `json:"message_count"`
 	NodeStats    []*TopicStats   `json:"nodes"`
+	LvDeferStats []*LvDeferStats `json:"lv_defer_backends"`
 	Channels     []*ChannelStats `json:"channels"`
 	Paused       bool            `json:"paused"`
 
@@ -303,4 +304,12 @@ type ProducersByHost struct {
 
 func (c ProducersByHost) Less(i, j int) bool {
 	return c.Producers[i].Hostname < c.Producers[j].Hostname
+}
+
+type LvDeferStats struct {
+	Level        int64 `json:"level"`
+	Depth        int64 `json:"depth"`
+	MemDepth     int64 `json:"mem_depth"`
+	BackendDepth int64 `json:"backend_depth"`
+	MessageCount int64 `json:"message_count"`
 }

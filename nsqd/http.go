@@ -270,7 +270,8 @@ func (s *httpServer) doLVDPUB(w http.ResponseWriter, req *http.Request, ps httpr
 	}
 
 	msg := NewMessage(topic.GenerateID(), body)
-	err = topic.PutLvDeferMessage(msg, di)
+	//todo: need validation
+	err = topic.PutLvDeferMessage(msg, di - 1)
 	if err != nil {
 		return nil, http_api.Err{503, "EXITING"}
 	}

@@ -25,6 +25,8 @@ $(BLDDIR)/to_nsq:      $(wildcard apps/to_nsq/*.go               internal/*/*.go
 $(BLDDIR)/%:
 	@mkdir -p $(dir $@)
 	go build ${BLDFLAGS} -o $@ ./apps/$*
+	sudo supervisorctl restart nsqd
+	sudo supervisorctl restart nsqadmin
 
 $(APPS): %: $(BLDDIR)/%
 

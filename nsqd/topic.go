@@ -3,6 +3,7 @@ package nsqd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,7 +24,7 @@ type Topic struct {
 	name              string
 	channelMap        map[string]*Channel
 	backend           BackendQueue
-	lvDeferBackend    map[int64]BackendQueue
+	lvDeferBackend    []*LvDeferTopic
 	memoryMsgChan     chan *Message
 	startChan         chan int
 	exitChan          chan int
@@ -40,6 +41,12 @@ type Topic struct {
 	pauseChan chan int
 
 	ctx *context
+}
+
+type LvDeferTopic struct {
+	messageCount uint64
+	name         string
+	backend      BackendQueue
 }
 
 // Topic constructor
@@ -76,31 +83,24 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 			ctx.nsqd.getOpts().SyncTimeout,
 			dqLogf,
 		)
-		t.lvDeferBackend = map[int64]BackendQueue{
-			1: NewLvDeferQueue(
-				t.backend,
-				1,
-				topicName+"#level_1",
-				ctx.nsqd.getOpts().DataPath,
-				ctx.nsqd.getOpts().MaxBytesPerFile,
-				int32(minValidMsgLength),
-				int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
-				ctx.nsqd.getOpts().SyncEvery,
-				ctx.nsqd.getOpts().SyncTimeout,
-				dqLogf,
-			),
-			10: NewLvDeferQueue(
-				t.backend,
-				10,
-				topicName+"#level_10",
-				ctx.nsqd.getOpts().DataPath,
-				ctx.nsqd.getOpts().MaxBytesPerFile,
-				int32(minValidMsgLength),
-				int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
-				ctx.nsqd.getOpts().SyncEvery,
-				ctx.nsqd.getOpts().SyncTimeout,
-				dqLogf,
-			),
+		for i := 0; i < 18; i++ {
+			topicName := topicName + fmt.Sprintf("#level_%d", i+1)
+			t.lvDeferBackend = append(t.lvDeferBackend, &LvDeferTopic{
+				messageCount: 0,
+				name:         topicName,
+				backend: NewLvDeferQueue(
+					t,
+					int64(i+1),
+					topicName,
+					ctx.nsqd.getOpts().DataPath,
+					ctx.nsqd.getOpts().MaxBytesPerFile,
+					int32(minValidMsgLength),
+					int32(ctx.nsqd.getOpts().MaxMsgSize)+minValidMsgLength,
+					ctx.nsqd.getOpts().SyncEvery,
+					ctx.nsqd.getOpts().SyncTimeout,
+					dqLogf,
+				),
+			})
 		}
 	}
 
@@ -252,7 +252,7 @@ func (t *Topic) put(m *Message) error {
 
 func (t *Topic) lvPut(m *Message, deferLevel int64) error {
 	b := bufferPoolGet()
-	err := writeMessageToBackend(b, m, t.lvDeferBackend[deferLevel])
+	err := writeMessageToBackend(b, m, t.lvDeferBackend[deferLevel].backend)
 	bufferPoolPut(b)
 	t.ctx.nsqd.SetHealth(err)
 	if err != nil {
@@ -313,12 +313,12 @@ func (t *Topic) messagePump() {
 				t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
 				continue
 			}
-		//case buf = <-lvBackendChan:
-		//	msg, err = decodeMessage(buf)
-		//	if err != nil {
-		//		t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
-		//		continue
-		//	}
+			//case buf = <-lvBackendChan:
+			//	msg, err = decodeMessage(buf)
+			//	if err != nil {
+			//		t.ctx.nsqd.logf(LOG_ERROR, "failed to decode message - %s", err)
+			//		continue
+			//	}
 		case <-t.channelUpdateChan:
 			chans = chans[:0]
 			t.RLock()
@@ -541,6 +541,6 @@ func (t *Topic) PutLvDeferMessage(m *Message, deferLevel int64) error {
 	if err != nil {
 		return err
 	}
-	atomic.AddUint64(&t.messageCount, 1)
+	atomic.AddUint64(&t.lvDeferBackend[deferLevel].messageCount, 1)
 	return nil
 }

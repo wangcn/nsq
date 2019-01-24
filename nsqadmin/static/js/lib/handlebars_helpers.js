@@ -286,3 +286,29 @@ Handlebars.registerPartial('warning', require('../views/warning.hbs'));
 Handlebars.registerHelper('basePath', function(p) {
     return AppState.basePath(p);
 });
+
+Handlebars.registerHelper('eval', function(str, options){
+    var reg = /{{.*?}}/g;
+    var result = false;
+    var variables = str.match(reg);
+    var context = this;
+    //如果是each
+    if(options.data){
+        context.first = context.first||options.data.first;
+        context.last = context.last||options.data.last;
+        context.index = context.index||options.data.index;
+        context.key = context.key||options.data.key;
+    }
+    _.each(variables, function(v){
+        var key = v.replace(/{{|}}/g,"");
+        var value = typeof context[key]==="string"?('"'+context[key]+'"'):context[key];
+        str = str.replace(v, value);
+    });
+    try{
+        result = eval(str);
+        return new Handlebars.SafeString(result);
+    }catch(e){
+        return new Handlebars.SafeString('rrr');
+        console.log(str,'--Handlerbars Helper "eval" deal with wrong expression!');
+    }
+});

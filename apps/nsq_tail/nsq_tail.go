@@ -54,6 +54,7 @@ func (th *TailHandler) HandleMessage(m *nsq.Message) error {
 		}
 	}
 
+	fmt.Print(time.Now().Format("2006-01-02 15:04:05"), "\t")
 	_, err := os.Stdout.Write(m.Body)
 	if err != nil {
 		log.Fatalf("ERROR: failed to write to os.Stdout - %s", err)
