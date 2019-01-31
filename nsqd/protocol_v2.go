@@ -928,30 +928,24 @@ func (p *protocolV2) DPUB(client *clientV2, params [][]byte) ([]byte, error) {
 func (p *protocolV2) LVDPUB(client *clientV2, params [][]byte) ([]byte, error) {
 	var err error
 
-	validLevel := map[uint64]int64 {
-		1: 1,
-		10: 60,
-	}
-
 	if len(params) < 3 {
-		return nil, protocol.NewFatalClientErr(nil, "E_INVALID", "DPUB insufficient number of parameters")
+		return nil, protocol.NewFatalClientErr(nil, "E_INVALID", "LVDPUB insufficient number of parameters")
 	}
 
 	topicName := string(params[1])
 	if !protocol.IsValidTopicName(topicName) {
 		return nil, protocol.NewFatalClientErr(nil, "E_BAD_TOPIC",
-			fmt.Sprintf("DPUB topic name %q is not valid", topicName))
+			fmt.Sprintf("LVDPUB topic name %q is not valid", topicName))
 	}
 
-	delayLevel, err := protocol.ByteToBase10(params[2])
+	deferLevel, err := protocol.ByteToBase10(params[2])
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_INVALID",
-			fmt.Sprintf("DPUB could not parse timeout %s", params[2]))
+			fmt.Sprintf("LVDPUB could not parse defer level %s", params[2]))
 	}
-	_, ok := validLevel[delayLevel]
-	if !ok {
+	if deferLevel < 1 || int(deferLevel) > len(DeferLevel) {
 		return nil, protocol.NewFatalClientErr(err, "E_INVALID",
-			fmt.Sprintf("DPUB could not parse timeout %s", params[2]))
+			fmt.Sprintf("LVDPUB could not get valid defer level %s", params[2]))
 	}
 
 	bodyLen, err := readLen(client.Reader, client.lenSlice)
@@ -981,7 +975,7 @@ func (p *protocolV2) LVDPUB(client *clientV2, params [][]byte) ([]byte, error) {
 
 	topic := p.ctx.nsqd.GetTopic(topicName)
 	msg := NewMessage(topic.GenerateID(), messageBody)
-	err = topic.PutLvDeferMessage(msg, delayLevel)
+	err = topic.PutLvDeferMessage(msg, deferLevel - 1)
 	if err != nil {
 		return nil, protocol.NewFatalClientErr(err, "E_DPUB_FAILED", "DPUB failed "+err.Error())
 	}
