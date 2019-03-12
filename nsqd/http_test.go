@@ -229,6 +229,34 @@ func TestHTTPpubDefer(t *testing.T) {
 	test.Equal(t, 1, numDef)
 }
 
+func TestHTTPLeveledDefer(t *testing.T) {
+	opts := NewOptions()
+	opts.Logger = test.NewTestLogger(t)
+	_, httpAddr, nsqd := mustStartNSQD(opts)
+	defer os.RemoveAll(opts.DataPath)
+	defer nsqd.Exit()
+
+	topicName := "test_http_pub_defer" + strconv.Itoa(int(time.Now().Unix()))
+	topic := nsqd.GetTopic(topicName)
+	ch := topic.GetChannel("ch")
+
+	buf := bytes.NewBuffer([]byte("test message"))
+	url := fmt.Sprintf("http://%s/lvdpub?topic=%s&defer=%d", httpAddr, topicName, 1)
+	resp, err := http.Post(url, "application/octet-stream", buf)
+	test.Nil(t, err)
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+	test.Equal(t, "OK", string(body))
+
+	numDef := len(ch.memoryMsgChan)
+	test.Equal(t, 0, numDef)
+
+	time.Sleep(3 * time.Second)
+
+	numDef = len(ch.memoryMsgChan)
+	test.Equal(t, 1, numDef)
+}
+
 func TestHTTPSRequire(t *testing.T) {
 	opts := NewOptions()
 	opts.Logger = test.NewTestLogger(t)
