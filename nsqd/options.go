@@ -14,12 +14,10 @@ import (
 
 type Options struct {
 	// basic options
-	ID        int64  `flag:"node-id" cfg:"id"`
-	LogLevel  string `flag:"log-level"`
-	LogPrefix string `flag:"log-prefix"`
-	Verbose   bool   `flag:"verbose"` // for backwards compatibility
+	ID        int64       `flag:"node-id" cfg:"id"`
+	LogLevel  lg.LogLevel `flag:"log-level"`
+	LogPrefix string      `flag:"log-prefix"`
 	Logger    Logger
-	logLevel  lg.LogLevel // private, not really an option
 
 	TCPAddress               string        `flag:"tcp-address"`
 	HTTPAddress              string        `flag:"http-address"`
@@ -56,7 +54,9 @@ type Options struct {
 	MaxRdyCount            int64         `flag:"max-rdy-count"`
 	MaxOutputBufferSize    int64         `flag:"max-output-buffer-size"`
 	MaxOutputBufferTimeout time.Duration `flag:"max-output-buffer-timeout"`
+	MinOutputBufferTimeout time.Duration `flag:"min-output-buffer-timeout"`
 	OutputBufferTimeout    time.Duration `flag:"output-buffer-timeout"`
+	MaxChannelConsumers    int           `flag:"max-channel-consumers"`
 
 	// statsd integration
 	StatsdAddress       string        `flag:"statsd-address"`
@@ -96,7 +96,7 @@ func NewOptions() *Options {
 	return &Options{
 		ID:        defaultID,
 		LogPrefix: "[nsqd] ",
-		LogLevel:  "info",
+		LogLevel:  lg.INFO,
 
 		TCPAddress:       "0.0.0.0:4150",
 		HTTPAddress:      "0.0.0.0:4151",
@@ -130,8 +130,10 @@ func NewOptions() *Options {
 		MaxHeartbeatInterval:   60 * time.Second,
 		MaxRdyCount:            2500,
 		MaxOutputBufferSize:    64 * 1024,
-		MaxOutputBufferTimeout: 1 * time.Second,
+		MaxOutputBufferTimeout: 30 * time.Second,
+		MinOutputBufferTimeout: 25 * time.Millisecond,
 		OutputBufferTimeout:    250 * time.Millisecond,
+		MaxChannelConsumers:    0,
 
 		StatsdPrefix:        "nsq.%s",
 		StatsdInterval:      60 * time.Second,
