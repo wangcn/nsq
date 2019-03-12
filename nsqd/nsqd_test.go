@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
-	"os/exec"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -180,7 +179,8 @@ func TestEphemeralTopicsAndChannels(t *testing.T) {
 	topic := nsqd.GetTopic(topicName)
 	ephemeralChannel := topic.GetChannel("ch1#ephemeral")
 	client := newClientV2(0, nil, &context{nsqd})
-	ephemeralChannel.AddClient(client.ID, client)
+	err := ephemeralChannel.AddClient(client.ID, client)
+	test.Equal(t, err, nil)
 
 	msg := NewMessage(topic.GenerateID(), body)
 	topic.PutMessage(msg)
@@ -243,8 +243,16 @@ func TestPauseMetadata(t *testing.T) {
 func mustStartNSQLookupd(opts *nsqlookupd.Options) (*net.TCPAddr, *net.TCPAddr, *nsqlookupd.NSQLookupd) {
 	opts.TCPAddress = "127.0.0.1:0"
 	opts.HTTPAddress = "127.0.0.1:0"
-	lookupd := nsqlookupd.New(opts)
-	lookupd.Main()
+	lookupd, err := nsqlookupd.New(opts)
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		err := lookupd.Main()
+		if err != nil {
+			panic(err)
+		}
+	}()
 	return lookupd.RealTCPAddr(), lookupd.RealHTTPAddr(), lookupd
 }
 
@@ -410,14 +418,15 @@ func TestCluster(t *testing.T) {
 func TestSetHealth(t *testing.T) {
 	opts := NewOptions()
 	opts.Logger = test.NewTestLogger(t)
-	nsqd := New(opts)
+	nsqd, err := New(opts)
+	test.Nil(t, err)
 	defer nsqd.Exit()
 
-	test.Equal(t, nil, nsqd.GetError())
+	test.Nil(t, nsqd.GetError())
 	test.Equal(t, true, nsqd.IsHealthy())
 
 	nsqd.SetHealth(nil)
-	test.Equal(t, nil, nsqd.GetError())
+	test.Nil(t, nsqd.GetError())
 	test.Equal(t, true, nsqd.IsHealthy())
 
 	nsqd.SetHealth(errors.New("health error"))
@@ -429,21 +438,4 @@ func TestSetHealth(t *testing.T) {
 	test.Nil(t, nsqd.GetError())
 	test.Equal(t, "OK", nsqd.GetHealth())
 	test.Equal(t, true, nsqd.IsHealthy())
-}
-
-func TestCrashingLogger(t *testing.T) {
-	if os.Getenv("BE_CRASHER") == "1" {
-		// Test invalid log level causes error
-		opts := NewOptions()
-		opts.LogLevel = "bad"
-		_ = New(opts)
-		return
-	}
-	cmd := exec.Command(os.Args[0], "-test.run=TestCrashingLogger")
-	cmd.Env = append(os.Environ(), "BE_CRASHER=1")
-	err := cmd.Run()
-	if e, ok := err.(*exec.ExitError); ok && !e.Success() {
-		return
-	}
-	t.Fatalf("process ran with err %v, want exit status 1", err)
 }
