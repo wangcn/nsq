@@ -56,7 +56,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 	t := &Topic{
 		name:              topicName,
 		channelMap:        make(map[string]*Channel),
-		memoryMsgChan:     make(chan *Message, ctx.nsqd.getOpts().MemQueueSize),
+		memoryMsgChan:     nil,
 		startChan:         make(chan int, 1),
 		exitChan:          make(chan int),
 		channelUpdateChan: make(chan int),
@@ -66,7 +66,10 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 		deleteCallback:    deleteCallback,
 		idFactory:         NewGUIDFactory(ctx.nsqd.getOpts().ID),
 	}
-
+	// create mem-queue only if size > 0 (do not use unbuffered chan)
+	if ctx.nsqd.getOpts().MemQueueSize > 0 {
+		t.memoryMsgChan = make(chan *Message, ctx.nsqd.getOpts().MemQueueSize)
+	}
 	if strings.HasSuffix(topicName, "#ephemeral") {
 		t.ephemeral = true
 		t.backend = newDummyBackendQueue()
