@@ -324,5 +324,9 @@ Handlebars.registerHelper('time_human', function(n){
         return minute + 'm'
     }
     var hour = n / timeSecond / 3600;
-    return hour + 'h'
+    if (hour <= 24) {
+        return hour + 'h'
+    }
+    var day = n / timeSecond / 3600 / 24;
+    return day + 'd'
 });

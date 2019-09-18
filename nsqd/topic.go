@@ -85,7 +85,7 @@ func NewTopic(topicName string, ctx *context, deleteCallback func(*Topic)) *Topi
 			ctx.nsqd.getOpts().SyncTimeout,
 			dqLogf,
 		)
-		for i := 0; i < 18; i++ {
+		for i := 0; i < len(DeferLevel); i++ {
 			topicName := topicName + fmt.Sprintf("#level_%d", i+1)
 			t.lvDeferTopic = append(t.lvDeferTopic, &LvDeferTopic{
 				level:        uint64(i),

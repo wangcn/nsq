@@ -32,7 +32,7 @@ type LvDeferTopicStats struct {
 }
 
 func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
-	lvDeferDepth := make([]LvDeferTopicStats, 18, 18)
+	lvDeferDepth := make([]LvDeferTopicStats, len(DeferLevel), len(DeferLevel))
 	for idx, item := range t.lvDeferTopic {
 		lvDeferDepth[idx] = LvDeferTopicStats{
 			Level:         int64(idx),

@@ -49,6 +49,7 @@ func (l LogLevel) String() string {
 
 //1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h
 var (
+	day        = 24 * time.Hour
 	DeferLevel = []int64{
 		1 * 1000 * 1000 * 1000,        // 1s
 		5 * 1000 * 1000 * 1000,        // 5s
@@ -68,6 +69,23 @@ var (
 		30 * 60 * 1000 * 1000 * 1000,  // 30m
 		1 * 3600 * 1000 * 1000 * 1000, // 1h
 		2 * 3600 * 1000 * 1000 * 1000, // 2h
+		int64(3 * time.Hour),
+		int64(4 * time.Hour),
+		int64(5 * time.Hour),
+		int64(6 * time.Hour),
+		int64(7 * time.Hour),
+		int64(8 * time.Hour),
+		int64(9 * time.Hour),
+		int64(10 * time.Hour),
+		int64(11 * time.Hour),
+		int64(12 * time.Hour),
+		int64(24 * time.Hour),
+		int64(2 * day),
+		int64(3 * day),
+		int64(4 * day),
+		int64(5 * day),
+		int64(6 * day),
+		int64(7 * day),
 	}
 )
 
@@ -625,6 +643,7 @@ func (d *diskQueue) ioLoop() {
 	var count int64
 	var r chan []byte
 	syncTicker := time.NewTicker(d.syncTimeout)
+	scanTicker := time.NewTicker(100 * time.Millisecond)
 
 	for {
 		// dont sync all the time :)
@@ -690,6 +709,7 @@ func (d *diskQueue) ioLoop() {
 				continue
 			}
 			d.needSync = true
+		case <-scanTicker.C:
 		case <-d.exitChan:
 			goto exit
 		}
