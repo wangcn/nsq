@@ -184,7 +184,7 @@ func (d *diskQueue) Depth() int64 {
 }
 
 // ReadChan returns the []byte channel for reading data
-func (d *diskQueue) ReadChan() chan []byte {
+func (d *diskQueue) ReadChan() <-chan []byte {
 	return d.readChan
 }
 
