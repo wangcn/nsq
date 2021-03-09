@@ -36,6 +36,7 @@ func New(opts *Options) (*NSQLookupd, error) {
 
 	l.logf(LOG_INFO, version.String("nsqlookupd"))
 
+	l.tcpServer = &tcpServer{nsqlookupd: l}
 	l.tcpListener, err = net.Listen("tcp", opts.TCPAddress)
 	if err != nil {
 		return nil, fmt.Errorf("listen (%s) failed - %s", opts.TCPAddress, err)
@@ -51,8 +52,6 @@ func New(opts *Options) (*NSQLookupd, error) {
 // Main starts an instance of nsqlookupd and returns an
 // error if there was a problem starting up.
 func (l *NSQLookupd) Main() error {
-	ctx := &Context{l}
-
 	exitCh := make(chan error)
 	var once sync.Once
 	exitFunc := func(err error) {
@@ -64,11 +63,10 @@ func (l *NSQLookupd) Main() error {
 		})
 	}
 
-	l.tcpServer = &tcpServer{ctx: ctx}
 	l.waitGroup.Wrap(func() {
 		exitFunc(protocol.TCPServer(l.tcpListener, l.tcpServer, l.logf))
 	})
-	httpServer := newHTTPServer(ctx)
+	httpServer := newHTTPServer(l)
 	l.waitGroup.Wrap(func() {
 		exitFunc(http_api.Serve(l.httpListener, httpServer, "HTTP", l.logf))
 	})
@@ -91,7 +89,7 @@ func (l *NSQLookupd) Exit() {
 	}
 
 	if l.tcpServer != nil {
-		l.tcpServer.CloseAll()
+		l.tcpServer.Close()
 	}
 
 	if l.httpListener != nil {

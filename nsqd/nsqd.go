@@ -1,6 +1,7 @@
 package nsqd
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -36,16 +37,14 @@ type errStore struct {
 	err error
 }
 
-type Client interface {
-	Stats() ClientStats
-	IsProducer() bool
-}
-
 type NSQD struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
 	clientIDSequence int64
 
 	sync.RWMutex
+	ctx context.Context
+	// ctxCancel cancels a context that main() is waiting on
+	ctxCancel context.CancelFunc
 
 	opts atomic.Value
 
@@ -55,9 +54,6 @@ type NSQD struct {
 	startTime time.Time
 
 	topicMap map[string]*Topic
-
-	clientLock sync.RWMutex
-	clients    map[int64]Client
 
 	lookupPeers atomic.Value
 
@@ -92,12 +88,12 @@ func New(opts *Options) (*NSQD, error) {
 	n := &NSQD{
 		startTime:            time.Now(),
 		topicMap:             make(map[string]*Topic),
-		clients:              make(map[int64]Client),
 		exitChan:             make(chan int),
 		notifyChan:           make(chan interface{}),
 		optsNotificationChan: make(chan struct{}, 1),
 		dl:                   dirlock.New(dataPath),
 	}
+	n.ctx, n.ctxCancel = context.WithCancel(context.Background())
 	httpcli := http_api.NewClient(nil, opts.HTTPClientConnectTimeout, opts.HTTPClientRequestTimeout)
 	n.ci = clusterinfo.New(n.logf, httpcli)
 
@@ -117,20 +113,6 @@ func New(opts *Options) (*NSQD, error) {
 
 	if opts.ID < 0 || opts.ID >= 1024 {
 		return nil, errors.New("--node-id must be [0,1024)")
-	}
-
-	if opts.StatsdPrefix != "" {
-		var port string
-		_, port, err = net.SplitHostPort(opts.HTTPAddress)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse HTTP address (%s) - %s", opts.HTTPAddress, err)
-		}
-		statsdHostKey := statsd.HostKey(net.JoinHostPort(opts.BroadcastAddress, port))
-		prefixWithHost := strings.Replace(opts.StatsdPrefix, "%s", statsdHostKey, -1)
-		if prefixWithHost[len(prefixWithHost)-1] != '.' {
-			prefixWithHost += "."
-		}
-		opts.StatsdPrefix = prefixWithHost
 	}
 
 	if opts.TLSClientAuthPolicy != "" && opts.TLSRequired == TLSNotRequired {
@@ -155,7 +137,7 @@ func New(opts *Options) (*NSQD, error) {
 	n.logf(LOG_INFO, version.String("nsqd"))
 	n.logf(LOG_INFO, "ID: %d", opts.ID)
 
-	n.tcpServer = &tcpServer{}
+	n.tcpServer = &tcpServer{nsqd: n}
 	n.tcpListener, err = net.Listen("tcp", opts.TCPAddress)
 	if err != nil {
 		return nil, fmt.Errorf("listen (%s) failed - %s", opts.TCPAddress, err)
@@ -169,6 +151,24 @@ func New(opts *Options) (*NSQD, error) {
 		if err != nil {
 			return nil, fmt.Errorf("listen (%s) failed - %s", opts.HTTPSAddress, err)
 		}
+	}
+
+	if opts.BroadcastHTTPPort == 0 {
+		opts.BroadcastHTTPPort = n.RealHTTPAddr().Port
+	}
+
+	if opts.BroadcastTCPPort == 0 {
+		opts.BroadcastTCPPort = n.RealTCPAddr().Port
+	}
+
+	if opts.StatsdPrefix != "" {
+		var port string = fmt.Sprint(opts.BroadcastHTTPPort)
+		statsdHostKey := statsd.HostKey(net.JoinHostPort(opts.BroadcastAddress, port))
+		prefixWithHost := strings.Replace(opts.StatsdPrefix, "%s", statsdHostKey, -1)
+		if prefixWithHost[len(prefixWithHost)-1] != '.' {
+			prefixWithHost += "."
+		}
+		opts.StatsdPrefix = prefixWithHost
 	}
 
 	return n, nil
@@ -226,26 +226,7 @@ func (n *NSQD) GetStartTime() time.Time {
 	return n.startTime
 }
 
-func (n *NSQD) AddClient(clientID int64, client Client) {
-	n.clientLock.Lock()
-	n.clients[clientID] = client
-	n.clientLock.Unlock()
-}
-
-func (n *NSQD) RemoveClient(clientID int64) {
-	n.clientLock.Lock()
-	_, ok := n.clients[clientID]
-	if !ok {
-		n.clientLock.Unlock()
-		return
-	}
-	delete(n.clients, clientID)
-	n.clientLock.Unlock()
-}
-
 func (n *NSQD) Main() error {
-	ctx := &context{n}
-
 	exitCh := make(chan error)
 	var once sync.Once
 	exitFunc := func(err error) {
@@ -257,18 +238,16 @@ func (n *NSQD) Main() error {
 		})
 	}
 
-	n.tcpServer.ctx = ctx
 	n.waitGroup.Wrap(func() {
 		exitFunc(protocol.TCPServer(n.tcpListener, n.tcpServer, n.logf))
 	})
 
-	httpServer := newHTTPServer(ctx, false, n.getOpts().TLSRequired == TLSRequired)
+	httpServer := newHTTPServer(n, false, n.getOpts().TLSRequired == TLSRequired)
 	n.waitGroup.Wrap(func() {
 		exitFunc(http_api.Serve(n.httpListener, httpServer, "HTTP", n.logf))
 	})
-
 	if n.tlsConfig != nil && n.getOpts().HTTPSAddress != "" {
-		httpsServer := newHTTPServer(ctx, true, true)
+		httpsServer := newHTTPServer(n, true, true)
 		n.waitGroup.Wrap(func() {
 			exitFunc(http_api.Serve(n.httpsListener, httpsServer, "HTTPS", n.logf))
 		})
@@ -423,12 +402,19 @@ func (n *NSQD) PersistMetadata() error {
 	return nil
 }
 
+// TermSignal handles a SIGTERM calling Exit
+// This is a noop after first call
+func (n *NSQD) TermSignal() {
+	n.Exit()
+}
+
 func (n *NSQD) Exit() {
 	if n.tcpListener != nil {
 		n.tcpListener.Close()
 	}
+
 	if n.tcpServer != nil {
-		n.tcpServer.CloseAll()
+		n.tcpServer.Close()
 	}
 
 	if n.httpListener != nil {
@@ -455,6 +441,7 @@ func (n *NSQD) Exit() {
 	n.waitGroup.Wait()
 	n.dl.Unlock()
 	n.logf(LOG_INFO, "NSQ: bye")
+	n.ctxCancel()
 }
 
 // GetTopic performs a thread safe operation
@@ -478,7 +465,7 @@ func (n *NSQD) GetTopic(topicName string) *Topic {
 	deleteCallback := func(t *Topic) {
 		n.DeleteExistingTopic(t.name)
 	}
-	t = NewTopic(topicName, &context{n}, deleteCallback)
+	t = NewTopic(topicName, n, deleteCallback)
 	n.topicMap[topicName] = t
 
 	n.Unlock()
@@ -753,4 +740,9 @@ func buildTLSConfig(opts *Options) (*tls.Config, error) {
 
 func (n *NSQD) IsAuthEnabled() bool {
 	return len(n.getOpts().AuthHTTPAddresses) != 0
+}
+
+// Context returns a context that will be canceled when nsqd initiates the shutdown
+func (n *NSQD) Context() context.Context {
+	return n.ctx
 }
