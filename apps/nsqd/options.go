@@ -174,5 +174,8 @@ func nsqdFlagSet(opts *nsqd.Options) *flag.FlagSet {
 	flagSet.Int("max-deflate-level", opts.MaxDeflateLevel, "max deflate compression level a client can negotiate (> values == > nsqd CPU usage)")
 	flagSet.Bool("snappy", opts.SnappyEnabled, "enable snappy feature negotiation (client compression)")
 
+	// deferred message
+	flagSet.Int64("time-seg", opts.TimeSeg, "the time span of a deferred message file block. DO NOT change it after deploying")
+
 	return flagSet
 }

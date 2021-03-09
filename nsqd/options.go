@@ -83,6 +83,9 @@ type Options struct {
 	DeflateEnabled  bool `flag:"deflate"`
 	MaxDeflateLevel int  `flag:"max-deflate-level"`
 	SnappyEnabled   bool `flag:"snappy"`
+
+	// deferred msg
+	TimeSeg int64 `flag:"time-seg"`
 }
 
 func NewOptions() *Options {
@@ -151,5 +154,7 @@ func NewOptions() *Options {
 		SnappyEnabled:   true,
 
 		TLSMinVersion: tls.VersionTLS10,
+
+		TimeSeg: 1800,
 	}
 }

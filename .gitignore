@@ -31,6 +31,8 @@ _posts
 # Folders
 _obj
 _test
+.github
+.idea
 
 # Architecture specific extensions/prefixes
 *.[568vq]

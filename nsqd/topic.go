@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/nsqio/go-diskqueue"
+
 	"github.com/nsqio/nsq/internal/lg"
 	"github.com/nsqio/nsq/internal/quantile"
 	"github.com/nsqio/nsq/internal/util"
+	"github.com/nsqio/nsq/nsqd/defer_queue"
 )
 
 type Topic struct {
@@ -181,6 +183,17 @@ func (t *Topic) PutMessage(m *Message) error {
 	defer t.RUnlock()
 	if atomic.LoadInt32(&t.exitFlag) == 1 {
 		return errors.New("exiting")
+	}
+	if m.deferred > 0 {
+		var msg defer_queue.Message
+		msg = defer_queue.Message{
+			ID:        defer_queue.MessageID(m.ID),
+			Body:      m.Body,
+			Timestamp: m.Timestamp,
+			Topic:     t.name,
+			Deferred:  int64(m.deferred),
+		}
+		return t.nsqd.deferQueue.Put(&msg)
 	}
 	err := t.put(m)
 	if err != nil {

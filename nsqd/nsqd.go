@@ -25,6 +25,7 @@ import (
 	"github.com/nsqio/nsq/internal/statsd"
 	"github.com/nsqio/nsq/internal/util"
 	"github.com/nsqio/nsq/internal/version"
+	"github.com/nsqio/nsq/nsqd/defer_queue"
 )
 
 const (
@@ -71,6 +72,8 @@ type NSQD struct {
 	waitGroup            util.WaitGroupWrapper
 
 	ci *clusterinfo.ClusterInfo
+
+	deferQueue defer_queue.DeferQueueInterface
 }
 
 func New(opts *Options) (*NSQD, error) {
@@ -170,6 +173,14 @@ func New(opts *Options) (*NSQD, error) {
 		}
 		opts.StatsdPrefix = prefixWithHost
 	}
+
+	n.logf(LOG_INFO, "NSQ: creating defer queue, time seg is %d", opts.TimeSeg)
+	deferQueueLogger := &defer_queue.Logger{
+		Logger:    opts.Logger,
+		BaseLevel: opts.LogLevel,
+	}
+	deferQ := defer_queue.NewDeferQueue(opts.DataPath, opts.TimeSeg, deferQueueLogger)
+	n.deferQueue = deferQ
 
 	return n, nil
 }
@@ -343,6 +354,13 @@ func (n *NSQD) LoadMetadata() error {
 		}
 		topic.Start()
 	}
+	n.startDeferQueue()
+	return nil
+}
+
+func (n *NSQD) startDeferQueue() error {
+	n.logf(LOG_INFO, "NSQ: starting defer queue")
+	n.deferQueue.Start()
 	return nil
 }
 
@@ -467,6 +485,7 @@ func (n *NSQD) GetTopic(topicName string) *Topic {
 	}
 	t = NewTopic(topicName, n, deleteCallback)
 	n.topicMap[topicName] = t
+	n.deferQueue.RegDownStream(topicName, t.backend)
 
 	n.Unlock()
 

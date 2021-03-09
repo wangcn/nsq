@@ -1,6 +1,6 @@
 module github.com/nsqio/nsq
 
-go 1.13
+go 1.15
 
 require (
 	github.com/BurntSushi/toml v0.3.1
@@ -15,4 +15,8 @@ require (
 	github.com/mreiferson/go-options v1.0.0
 	github.com/nsqio/go-diskqueue v1.0.0
 	github.com/nsqio/go-nsq v1.0.8
+	github.com/stretchr/objx v0.3.0 // indirect
+	github.com/stretchr/testify v1.7.0
+	github.com/tinylib/msgp v1.1.5
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
