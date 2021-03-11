@@ -21,9 +21,11 @@ type TimeWheel struct {
 
 	sync.RWMutex
 	exitFlag int32
+
+	logf AppLogFunc
 }
 
-func NewTimeWheel(interval time.Duration, slotsNum int64) *TimeWheel {
+func NewTimeWheel(interval time.Duration, slotsNum int64, logf AppLogFunc) *TimeWheel {
 	tw := &TimeWheel{
 		interval:    interval,
 		slots:       make([]*list.List, slotsNum),
@@ -31,6 +33,7 @@ func NewTimeWheel(interval time.Duration, slotsNum int64) *TimeWheel {
 		slotsNum:    slotsNum,
 		addChannel:  make(chan Message),
 		stopChannel: make(chan bool),
+		logf:        logf,
 	}
 	tw.initSlots()
 	return tw

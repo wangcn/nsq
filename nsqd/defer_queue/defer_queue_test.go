@@ -223,7 +223,7 @@ func TestDeferQueue_readTopic2(t *testing.T) {
 		err = producer.DeferredPublish("test", time.Duration(5)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
 		assert.NoError(t, err)
 		sendCount++
-		if time.Since(start) > 30*time.Second {
+		if time.Since(start) > 1*time.Second {
 			break
 		}
 	}
@@ -235,21 +235,18 @@ func TestDeferQueue_readTopic2(t *testing.T) {
 		return err
 	}
 	consumer, err := nsq.NewConsumer("test", "defer", cfg)
+	assert.NoError(t, err)
 	consumer.AddHandler(nsq.HandlerFunc(work))
 	err = consumer.ConnectToNSQD("127.0.0.1:4150")
 	assert.NoError(t, err)
 	tick := time.NewTicker(5 * time.Second)
-checkLoop:
-	for {
-		select {
-		case <-tick.C:
-			consumeCount := atomic.LoadInt64(&count)
-			log.Println("count is", consumeCount, "send count is", sendCount)
-			if consumeCount == sendCount {
-				producer.Stop()
-				consumer.Stop()
-				break checkLoop
-			}
+	for range tick.C {
+		consumeCount := atomic.LoadInt64(&count)
+		log.Println("count is", consumeCount, "send count is", sendCount)
+		if consumeCount == sendCount {
+			producer.Stop()
+			consumer.Stop()
+			break
 		}
 	}
 }

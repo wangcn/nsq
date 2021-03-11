@@ -21,15 +21,19 @@ type deferBackendPool struct {
 
 	dataPath string
 	subPath  string
+
+	logf AppLogFunc
 }
 
-func newDeferBackendPool(dataPath string) *deferBackendPool {
+func newDeferBackendPool(dataPath string, logf AppLogFunc) *deferBackendPool {
 	ins := &deferBackendPool{
 		data:     make(map[int64]BackendInterface, 0),
 		linkList: list.New(),
 
 		dataPath: dataPath,
 		subPath:  "__deferQ",
+
+		logf: logf,
 	}
 	return ins
 }
@@ -60,14 +64,11 @@ func (h *deferBackendPool) Load(fileName string) {
 		}
 		name := strings.TrimSpace(line)
 		startPoint, _ := strconv.ParseInt(name, 10, 64)
-		h.Create(startPoint)
+		h.Create(startPoint, h.logf)
 	}
 }
 
-func (h *deferBackendPool) newDiskQueue(startTs int64) BackendInterface {
-	dqLogf := func(level LogLevel, f string, args ...interface{}) {
-		log.Printf(f, args...)
-	}
+func (h *deferBackendPool) newDiskQueue(startTs int64, logf AppLogFunc) BackendInterface {
 	name := strconv.FormatInt(startTs, 10)
 	return NewBackend(
 		nil,
@@ -78,11 +79,11 @@ func (h *deferBackendPool) newDiskQueue(startTs int64) BackendInterface {
 		SizeMaxMsg,
 		-1,
 		time.Second,
-		dqLogf,
+		logf,
 	)
 }
 
-func (h *deferBackendPool) Create(startTs int64) BackendInterface {
+func (h *deferBackendPool) Create(startTs int64, logf AppLogFunc) BackendInterface {
 	if h.linkList.Len() == 0 {
 		h.linkList.PushBack(startTs)
 	} else {
@@ -94,7 +95,7 @@ func (h *deferBackendPool) Create(startTs int64) BackendInterface {
 			}
 		}
 	}
-	q := h.newDiskQueue(startTs)
+	q := h.newDiskQueue(startTs, logf)
 	log.Println("create backend", startTs)
 	h.data[startTs] = q
 	return q

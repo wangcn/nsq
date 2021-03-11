@@ -83,12 +83,10 @@ func (h *deliveryIndex) persistMetaData() error {
 		f.Close()
 		return err
 	}
-	log.Println("fffffffffffffffffff start", tmpFileName, fileName)
 	f.Sync()
 	f.Close()
 
 	// atomically rename
-	log.Println("rrrrrrrrrrrrrrrrrrr", tmpFileName, fileName)
 	return os.Rename(tmpFileName, fileName)
 }
 

@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewTimeWheel(t *testing.T) {
-	tw := NewTimeWheel(time.Second, 60)
+	tw := NewTimeWheel(time.Second, 60, nil)
 	t.Log(tw.curPos)
 	tw.Start()
 	t.Log(time.Now().Second(), tw.curPos)
@@ -18,9 +18,9 @@ func TestNewTimeWheel(t *testing.T) {
 }
 
 func TestTimeWheel_AddMessage(t *testing.T) {
-	tw := NewTimeWheel(time.Second, 60)
+	tw := NewTimeWheel(time.Second, 60, nil)
 	tw.RegCallback(func(msg *Message) {
-		log.Println("msg defer", msg.Deferred / int64(time.Second))
+		log.Println("msg defer", msg.Deferred/int64(time.Second))
 	})
 	tw.Start()
 	t.Log(tw.curPos)
@@ -71,7 +71,7 @@ func (h *cbDemo) Add(a string) {
 
 func TestTimeWheel_RegCallback(t *testing.T) {
 	cbIns := NewCbDemo()
-	tw := NewTimeWheel(time.Second, 60)
+	tw := NewTimeWheel(time.Second, 60, nil)
 	tw.RegCallback(cbIns.Info)
 	tw.Start()
 	t.Log(tw.curPos)

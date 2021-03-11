@@ -73,7 +73,7 @@ func NewDeferQueue(dataPath string, timeSeg int64, logger *Logger) DeferQueueInt
 		lg.Logf(logger.Logger, logger.BaseLevel, lg.LogLevel(level), f, args...)
 	}
 	q := &deferQueue{
-		pool:         newDeferBackendPool(dataPath),
+		pool:         newDeferBackendPool(dataPath, dqLogf),
 		subPath:      "__deferQ",
 		dataPath:     dataPath,
 		syncInterval: time.Second,
@@ -118,7 +118,7 @@ func (h *deferQueue) initPath() {
 func (h *deferQueue) load() {
 	fileName := h.metaDataFileName()
 	h.pool.Load(fileName)
-	h.tw = NewTimeWheel(time.Second, h.timeSeg)
+	h.tw = NewTimeWheel(time.Second, h.timeSeg, h.logf)
 	h.tw.RegCallback(h.twCallback)
 	h.tw.Start()
 }
@@ -297,7 +297,7 @@ func (h *deferQueue) writeOne(msg *Message) error {
 	if dq, ok := h.pool.Get(startPoint); ok {
 		err = dq.Put(msgByte)
 	} else {
-		dq = h.pool.Create(startPoint)
+		dq = h.pool.Create(startPoint, h.logf)
 		err = dq.Put(msgByte)
 	}
 	return err

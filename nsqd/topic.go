@@ -185,15 +185,20 @@ func (t *Topic) PutMessage(m *Message) error {
 		return errors.New("exiting")
 	}
 	if m.deferred > 0 {
-		var msg defer_queue.Message
-		msg = defer_queue.Message{
+		msg := defer_queue.Message{
 			ID:        defer_queue.MessageID(m.ID),
 			Body:      m.Body,
 			Timestamp: m.Timestamp,
 			Topic:     t.name,
 			Deferred:  int64(m.deferred),
 		}
-		return t.nsqd.deferQueue.Put(&msg)
+		err := t.nsqd.deferQueue.Put(&msg)
+		if err != nil {
+			return err
+		}
+		atomic.AddUint64(&t.messageCount, 1)
+		atomic.AddUint64(&t.messageBytes, uint64(len(m.Body)))
+		return nil
 	}
 	err := t.put(m)
 	if err != nil {

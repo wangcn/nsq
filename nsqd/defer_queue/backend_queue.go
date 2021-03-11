@@ -104,9 +104,6 @@ type backendQueue struct {
 	exitSyncChan      chan int
 
 	logf AppLogFunc
-
-	expireAt    int64 // seconds
-	deliverChan chan []byte
 }
 
 // New instantiates an instance of diskQueue, retrieving metadata
