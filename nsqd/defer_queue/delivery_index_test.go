@@ -27,7 +27,7 @@ func PrintMemUsage() {
 
 func TestDeliveryIndex_Add(t *testing.T) {
 	resetDir()
-	index, err := NewDeliveryIndex("demo", "__deferQ")
+	index, err := NewDeliveryIndex("demo", "__deferQ", nil)
 	index.Start()
 	assert.NoError(t, err)
 	var msgID MessageID
@@ -42,7 +42,7 @@ func TestDeliveryIndex_Add(t *testing.T) {
 
 func TestDeliveryIndex_load(t *testing.T) {
 	resetDir()
-	index, err := NewDeliveryIndex("demo", "__deferQ")
+	index, err := NewDeliveryIndex("demo", "__deferQ", nil)
 	assert.NoError(t, err)
 	var msgID MessageID
 	for i := 1; i <= 10; i++ {
@@ -51,7 +51,7 @@ func TestDeliveryIndex_load(t *testing.T) {
 	}
 	_ = index.Close()
 
-	index2, err := NewDeliveryIndex("demo", "__deferQ")
+	index2, err := NewDeliveryIndex("demo", "__deferQ", nil)
 	assert.NoError(t, err)
 	copy(msgID[:], fmt.Sprint(1))
 	assert.Equal(t, true, index2.Exists(msgID))
@@ -65,7 +65,7 @@ func TestDeliveryIndex_load(t *testing.T) {
 
 func TestDeliveryIndex_Remove(t *testing.T) {
 	resetDir()
-	index, err := NewDeliveryIndex("demo", "__deferQ")
+	index, err := NewDeliveryIndex("demo", "__deferQ", nil)
 	assert.NoError(t, err)
 	index.Start()
 	var msgID MessageID
@@ -82,7 +82,7 @@ func TestDeliveryIndex_Remove(t *testing.T) {
 func TestDeliveryIndex_Memory(t *testing.T) {
 	resetDir()
 	PrintMemUsage()
-	index, err := NewDeliveryIndex("demo", "__deferQ")
+	index, err := NewDeliveryIndex("demo", "__deferQ", nil)
 	assert.NoError(t, err)
 	index.Start()
 	start := time.Now()

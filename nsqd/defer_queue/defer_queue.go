@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path"
 	"sync"
@@ -54,8 +53,8 @@ type deferQueue struct {
 	// downStreamRegChan     chan downStream
 	downStreamDeRegChan   chan string
 	downStreamDeliverChan chan Message
+	downStreamLock        sync.RWMutex
 
-	now         int64 // nanosecond
 	timeSeg     int64
 	curStartTs  int64
 	lastStartTs int64
@@ -90,7 +89,6 @@ func NewDeferQueue(dataPath string, timeSeg int64, logger *Logger) DeferQueueInt
 		downStreamDeRegChan:   make(chan string),
 		downStreamDeliverChan: make(chan Message),
 
-		now:     time.Now().UnixNano(),
 		timeSeg: timeSeg,
 
 		logf: dqLogf,
@@ -102,13 +100,14 @@ func NewDeferQueue(dataPath string, timeSeg int64, logger *Logger) DeferQueueInt
 func (h *deferQueue) Start() {
 	h.load()
 	h.processHistory()
-	go h.ioloop()
+	go h.ioLoop()
 }
 
 func (h *deferQueue) initPath() {
 	var err error
-	if _, err = os.Stat(h.subPath); os.IsNotExist(err) {
-		err = os.Mkdir(h.subPath, 0755)
+	fullPath := path.Join(h.dataPath, h.subPath)
+	if _, err = os.Stat(fullPath); os.IsNotExist(err) {
+		err = os.Mkdir(fullPath, 0755)
 		if err != nil {
 			panic(err)
 		}
@@ -123,16 +122,18 @@ func (h *deferQueue) load() {
 	h.tw.Start()
 }
 
-func (h *deferQueue) ioloop() {
+func (h *deferQueue) ioLoop() {
 	var count int64
 	var dataRead []byte
 
-	secondTicker := time.NewTicker(time.Second)
 	syncTicker := time.NewTicker(h.syncInterval)
 	gcTicker := time.NewTicker(time.Second)
 	for {
 		if h.needSync {
-			h.persistMetaData()
+			err := h.persistMetaData()
+			if err != nil {
+				h.logf(ERROR, "defer queue persist meta failed - %s", err)
+			}
 			count = 0
 		}
 
@@ -147,6 +148,7 @@ func (h *deferQueue) ioloop() {
 		// case downStreamIns := <-h.downStreamRegChan:
 		// 	h.downStreamPool[downStreamIns.name] = downStreamIns.Interface
 		case topicName := <-h.downStreamDeRegChan:
+			h.logf(INFO, "deleting defer down stream: %s", topicName)
 			delete(h.downStreamPool, topicName)
 		case msg := <-h.downStreamDeliverChan:
 			h.sendToTopic(&msg)
@@ -157,8 +159,6 @@ func (h *deferQueue) ioloop() {
 				continue
 			}
 			h.needSync = true
-		case <-secondTicker.C:
-			h.now += int64(time.Second)
 		case <-gcTicker.C:
 			h.gc()
 		case <-h.exitChan:
@@ -166,7 +166,7 @@ func (h *deferQueue) ioloop() {
 		}
 	}
 exit:
-	h.logf(INFO, "DEFER_QUEUE(%s): closing ... ioLoop")
+	h.logf(INFO, "DEFER_QUEUE: closing ... ioLoop")
 	syncTicker.Stop()
 	h.exitSyncChan <- 1
 }
@@ -174,10 +174,13 @@ exit:
 func (h *deferQueue) dispatch(dataRead []byte) {
 	var msg Message
 	_, _ = msg.UnmarshalMsg(dataRead)
-	deferred := msg.Timestamp + msg.Deferred - h.now
+	deferred := msg.Timestamp + msg.Deferred - time.Now().UnixNano()
 	// 单位为纳秒。不足一秒时，直接投递。
 	if deferred > int64(time.Second) {
-		h.tw.AddMessage(&msg)
+		err := h.tw.AddMessage(&msg)
+		if err != nil {
+			h.logf(ERROR, "time wheel insert failed - %s", err)
+		}
 	} else {
 		h.sendToTopic(&msg)
 	}
@@ -192,7 +195,12 @@ func (h *deferQueue) sendToTopic(msg *Message) {
 	if h.sentIndex.Exists(msg.ID) {
 		return
 	}
-	if dq, ok := h.downStreamPool[msg.Topic]; ok {
+	var ok bool
+	var dq diskqueue.Interface
+	h.downStreamLock.RLock()
+	dq, ok = h.downStreamPool[msg.Topic]
+	h.downStreamLock.RUnlock()
+	if ok {
 		nsqMsg := NsqMessage{
 			ID:        msg.ID,
 			Body:      msg.Body,
@@ -205,23 +213,21 @@ func (h *deferQueue) sendToTopic(msg *Message) {
 }
 
 func (h *deferQueue) gc() {
-	// relaxationTime := int64(5)
-	// now := time.Now().Unix()
-	// curStartTs := now - now%h.timeSeg
-	// if now-curStartTs < relaxationTime {
-	// 	return
-	// }
-	// preStartTs := curStartTs - h.timeSeg
-	// h.pool.Remove(preStartTs)
+	var lastStartTs int64
 	// gc last file
 	if h.lastStartTs != 0 {
+		lastStartTs = h.lastStartTs
 		h.pool.Remove(h.lastStartTs)
 		h.lastStartTs = 0
 	}
 	// gc deliverIndex
 	if h.lastSentIndex != nil {
+		h.lastSentIndex.Close()
 		h.lastSentIndex.Remove()
 		h.lastSentIndex = nil
+	}
+	if lastStartTs > 0 {
+		h.logf(INFO, "gc backend queue %d", lastStartTs)
 	}
 }
 
@@ -231,7 +237,7 @@ func (h *deferQueue) selectBackend() {
 	var ok bool
 	now := time.Now().Unix()
 	nextStartTs := now - now%h.timeSeg
-	h.logf(DEBUG, "selectBackend. curTs: %d, nextTs: %d", h.curStartTs, nextStartTs)
+	h.logf(DEBUG, "try to selectBackend. curTs: %d, nextTs: %d", h.curStartTs, nextStartTs)
 	if h.curStartTs < nextStartTs {
 		h.lastSentIndex = h.sentIndex
 		h.sentIndex = nil
@@ -240,11 +246,12 @@ func (h *deferQueue) selectBackend() {
 		if ok && !curBlock.HasFinishedRead() {
 			return
 		}
-		h.lastStartTs = h.curStartTs
 		nextBlock, ok = h.pool.Get(nextStartTs)
 		if ok {
+			h.logf(INFO, "selectBackend. curTs: %d, nextTs: %d", h.curStartTs, nextStartTs)
+			h.lastStartTs = h.curStartTs
 			h.curStartTs = nextStartTs
-			h.sentIndex, _ = NewDeliveryIndex(fmt.Sprintf("%d", h.curStartTs), path.Join(h.dataPath, h.subPath))
+			h.sentIndex, _ = NewDeliveryIndex(fmt.Sprintf("%d", h.curStartTs), path.Join(h.dataPath, h.subPath), h.logf)
 			h.sentIndex.Start()
 			nextBlock.SetReadChan(h.readChan)
 		}
@@ -263,8 +270,8 @@ func (h *deferQueue) processHistory() {
 			continue
 		}
 		backend, _ := h.pool.Get(ts)
-		log.Println("processHistory", ts)
-		h.sentIndex, _ = NewDeliveryIndex(fmt.Sprintf("%d", ts), path.Join(h.dataPath, h.subPath))
+		h.logf(DEBUG, "processHistory %d", ts)
+		h.sentIndex, _ = NewDeliveryIndex(fmt.Sprintf("%d", ts), path.Join(h.dataPath, h.subPath), h.logf)
 		for {
 			b, err = backend.Scan()
 			if err != nil {
@@ -290,10 +297,14 @@ func (h *deferQueue) processHistory() {
 
 func (h *deferQueue) writeOne(msg *Message) error {
 	var err error
+	var msgByte []byte
 	actTime := (msg.Timestamp + msg.Deferred) / int64(time.Second)
 	startPoint := actTime - actTime%h.timeSeg
 	// endPoint := startPoint + h.timeSeg - 1f
-	msgByte, _ := msg.MarshalMsg(nil)
+	msgByte, err = msg.MarshalMsg(nil)
+	if err != nil {
+		return err
+	}
 	if dq, ok := h.pool.Get(startPoint); ok {
 		err = dq.Put(msgByte)
 	} else {
@@ -336,14 +347,21 @@ func (h *deferQueue) Put(msg *Message) error {
 func (h *deferQueue) Close() error {
 	h.Lock()
 	defer h.Unlock()
+	var err error
 
 	h.exitFlag = 1
 
 	h.logf(INFO, "DEFER_QUEUE is closing")
 
 	h.readChan = nil
+	err = h.pool.Close()
+	if err != nil {
+		h.logf(ERROR, "close defer backend pool failed. err is %s", err)
+	}
 	h.tw.Stop()
-	h.sentIndex.Close()
+	if h.sentIndex != nil {
+		h.sentIndex.Close()
+	}
 	close(h.exitChan)
 	// ensure that ioLoop has exited
 	<-h.exitSyncChan
@@ -356,7 +374,9 @@ func (h *deferQueue) RegDownStream(topicName string, dq diskqueue.Interface) {
 	// 	name:      topicName,
 	// 	Interface: dq,
 	// }
+	h.downStreamLock.Lock()
 	h.downStreamPool[topicName] = dq
+	h.downStreamLock.Unlock()
 }
 
 func (h *deferQueue) DeRegDownStream(topicName string) {

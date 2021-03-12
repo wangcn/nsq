@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -96,7 +95,7 @@ func (h *deferBackendPool) Create(startTs int64, logf AppLogFunc) BackendInterfa
 		}
 	}
 	q := h.newDiskQueue(startTs, logf)
-	log.Println("create backend", startTs)
+	h.logf(DEBUG, "create backend %d", startTs)
 	h.data[startTs] = q
 	return q
 }
@@ -170,4 +169,15 @@ func (h *deferBackendPool) AllStartPoint() []int64 {
 		tsList = append(tsList, ts)
 	}
 	return tsList
+}
+
+func (h *deferBackendPool) Close() error {
+	var err error
+	for _, q := range h.data {
+		err1 :=  q.Close()
+		if err1 != nil {
+			err = err1
+		}
+	}
+	return err
 }

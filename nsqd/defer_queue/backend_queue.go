@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -665,7 +664,6 @@ func (d *backendQueue) ioLoop() {
 			}
 			d.needSync = true
 		case <-d.exitChan:
-			log.Println("d.exitChan")
 			goto exit
 		}
 	}

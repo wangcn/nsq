@@ -3,7 +3,6 @@ package defer_queue
 import (
 	"container/list"
 	"errors"
-	"log"
 	"sync"
 	"time"
 )
@@ -60,9 +59,11 @@ func (h *TimeWheel) start() {
 		case msg := <-h.addChannel:
 			h.add(&msg)
 		case <-h.stopChannel:
-			return
+			goto exit
 		}
 	}
+exit:
+	h.logf(INFO, "time wheel exit")
 }
 
 func (h *TimeWheel) tickHandler() {
@@ -91,9 +92,9 @@ func (h *TimeWheel) Stop() {
 	h.Lock()
 	defer h.Unlock()
 	h.exitFlag = 1
-	log.Println("timeWheel stop 1")
+	h.logf(DEBUG, "time wheel stop 1")
 	h.stopChannel <- true
-	log.Println("timeWheel stop 2")
+	h.logf(DEBUG, "time wheel stop 2")
 }
 
 func (h *TimeWheel) AddMessage(msg *Message) error {

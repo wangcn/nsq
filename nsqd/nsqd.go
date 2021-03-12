@@ -444,7 +444,11 @@ func (n *NSQD) Exit() {
 	}
 
 	n.Lock()
-	err := n.PersistMetadata()
+	err := n.deferQueue.Close()
+	if err != nil {
+		n.logf(LOG_ERROR, "failed to close defer queue - %s", err)
+	}
+	err = n.PersistMetadata()
 	if err != nil {
 		n.logf(LOG_ERROR, "failed to persist metadata - %s", err)
 	}
@@ -550,6 +554,7 @@ func (n *NSQD) DeleteExistingTopic(topicName string) error {
 	topic.Delete()
 
 	n.Lock()
+	n.deferQueue.DeRegDownStream(topicName)
 	delete(n.topicMap, topicName)
 	n.Unlock()
 

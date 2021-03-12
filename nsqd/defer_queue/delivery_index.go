@@ -25,15 +25,18 @@ type deliveryIndex struct {
 
 	sync.Mutex
 	needSync bool
+
+	logf AppLogFunc
 }
 
-func NewDeliveryIndex(name string, filePath string) (*deliveryIndex, error) {
-	log.Println("NewDeliveryIndex", name, filePath)
+func NewDeliveryIndex(name string, filePath string, logf AppLogFunc) (*deliveryIndex, error) {
+	logf(DEBUG, "NewDeliveryIndex %s %s", name, filePath)
 	ins := &deliveryIndex{
 		filePath: filePath,
 		name:     name,
 		index:    make(map[MessageID]struct{}),
 		stopChan: make(chan int),
+		logf: logf,
 	}
 	ins.retrieveMetaData()
 	ins.load()
