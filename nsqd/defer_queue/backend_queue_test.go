@@ -1,9 +1,12 @@
 package defer_queue
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,4 +63,30 @@ func TestDiskQueue_Scan(t *testing.T) {
 	}
 	_ = dq.Empty()
 	_ = dq.Close()
+}
+
+func BenchmarkDiskQueue_writeUnbuffered(b *testing.B) {
+	b.StopTimer()
+	fh, _ := os.Create("/tmp/z_disk.log")
+	content := []byte(strings.Repeat("a", 50))
+	b.StartTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		fh.Write(content)
+	}
+	fh.Close()
+}
+
+func BenchmarkDiskQueue_writeBuffered(b *testing.B) {
+	b.StopTimer()
+	fh, _ := os.Create("/tmp/z_disk.log")
+	writer := bufio.NewWriter(fh)
+	content := []byte(strings.Repeat("a", 50))
+	b.StartTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		writer.Write(content)
+	}
+	writer.Flush()
+	fh.Close()
 }

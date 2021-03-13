@@ -14,6 +14,11 @@ func bToMb(b uint64) uint64 {
 	return b / 1024 / 1024
 }
 
+func logf(lvl LogLevel, f string, args ...interface{}) {
+	tmp := fmt.Sprintf(f, args...)
+	log.Printf("%d %s", lvl, tmp)
+}
+
 func PrintMemUsage() {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
@@ -24,15 +29,14 @@ func PrintMemUsage() {
 	fmt.Printf("\tNumGC = %v\n", m.NumGC)
 }
 
-
 func TestDeliveryIndex_Add(t *testing.T) {
 	resetDir()
-	index, err := NewDeliveryIndex("demo", "__deferQ", nil)
+	index, err := NewDeliveryIndex("demo", "__deferQ", logf)
 	index.Start()
 	assert.NoError(t, err)
 	var msgID MessageID
 	for i := 1; i <= 10; i++ {
-		copy(msgID[:],fmt.Sprint(i))
+		copy(msgID[:], fmt.Sprint(i))
 		_ = index.Add(msgID)
 	}
 	err = index.Close()
@@ -46,7 +50,7 @@ func TestDeliveryIndex_load(t *testing.T) {
 	assert.NoError(t, err)
 	var msgID MessageID
 	for i := 1; i <= 10; i++ {
-		copy(msgID[:],fmt.Sprint(i))
+		copy(msgID[:], fmt.Sprint(i))
 		index.Add(msgID)
 	}
 	_ = index.Close()

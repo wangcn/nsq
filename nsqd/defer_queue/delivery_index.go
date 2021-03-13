@@ -30,18 +30,29 @@ type deliveryIndex struct {
 }
 
 func NewDeliveryIndex(name string, filePath string, logf AppLogFunc) (*deliveryIndex, error) {
+	var retErr error
+	var err error
 	logf(DEBUG, "NewDeliveryIndex %s %s", name, filePath)
 	ins := &deliveryIndex{
 		filePath: filePath,
 		name:     name,
 		index:    make(map[MessageID]struct{}),
 		stopChan: make(chan int),
-		logf: logf,
+		logf:     logf,
 	}
-	ins.retrieveMetaData()
-	ins.load()
-	ins.prepareWrite()
-	return ins, nil
+	err = ins.retrieveMetaData()
+	if err != nil && !os.IsNotExist(err) {
+		logf(ERROR, "BACKEND(%s) failed to retrieve deliveryIndex MetaData - %s", name, err)
+	}
+	err = ins.load()
+	if retErr == nil && err != nil {
+		retErr = err
+	}
+	err = ins.prepareWrite()
+	if retErr == nil && err != nil {
+		retErr = err
+	}
+	return ins, retErr
 }
 
 func (h *deliveryIndex) Start() {

@@ -126,7 +126,7 @@ func (h *deferQueue) ioLoop() {
 	var count int64
 	var dataRead []byte
 
-	syncTicker := time.NewTicker(h.syncInterval)
+	// syncTicker := time.NewTicker(h.syncInterval)
 	gcTicker := time.NewTicker(time.Second)
 	for {
 		if h.needSync {
@@ -152,14 +152,15 @@ func (h *deferQueue) ioLoop() {
 			delete(h.downStreamPool, topicName)
 		case msg := <-h.downStreamDeliverChan:
 			h.sendToTopic(&msg)
-		case <-syncTicker.C:
-			h.selectBackend()
-			if count == 0 {
-				// avoid sync when there's no activity
-				continue
-			}
-			h.needSync = true
+		// case <-syncTicker.C:
+		// 	h.selectBackend()
+		// 	if count == 0 {
+		// 		// avoid sync when there's no activity
+		// 		continue
+		// 	}
+		// 	h.needSync = true
 		case <-gcTicker.C:
+			h.selectBackend()
 			h.gc()
 		case <-h.exitChan:
 			goto exit
@@ -167,7 +168,7 @@ func (h *deferQueue) ioLoop() {
 	}
 exit:
 	h.logf(INFO, "DEFER_QUEUE: closing ... ioLoop")
-	syncTicker.Stop()
+	// syncTicker.Stop()
 	h.exitSyncChan <- 1
 }
 
@@ -227,6 +228,7 @@ func (h *deferQueue) gc() {
 		h.lastSentIndex = nil
 	}
 	if lastStartTs > 0 {
+		h.needSync = true
 		h.logf(INFO, "gc backend queue %d", lastStartTs)
 	}
 }
@@ -300,7 +302,6 @@ func (h *deferQueue) writeOne(msg *Message) error {
 	var msgByte []byte
 	actTime := (msg.Timestamp + msg.Deferred) / int64(time.Second)
 	startPoint := actTime - actTime%h.timeSeg
-	// endPoint := startPoint + h.timeSeg - 1f
 	msgByte, err = msg.MarshalMsg(nil)
 	if err != nil {
 		return err
@@ -310,6 +311,7 @@ func (h *deferQueue) writeOne(msg *Message) error {
 	} else {
 		dq = h.pool.Create(startPoint, h.logf)
 		err = dq.Put(msgByte)
+		h.needSync = true
 	}
 	return err
 }
