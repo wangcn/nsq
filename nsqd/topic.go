@@ -220,6 +220,23 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 	messageTotalBytes := 0
 
 	for i, m := range msgs {
+		if m.deferred > 0 {
+			msg := defer_queue.Message{
+				ID:        defer_queue.MessageID(m.ID),
+				Body:      m.Body,
+				Timestamp: m.Timestamp,
+				Topic:     t.name,
+				Deferred:  int64(m.deferred),
+			}
+			err := t.nsqd.deferQueue.Put(&msg)
+			if err != nil {
+				atomic.AddUint64(&t.messageCount, uint64(i))
+				atomic.AddUint64(&t.messageBytes, uint64(messageTotalBytes))
+				return err
+			}
+			messageTotalBytes += len(m.Body)
+			continue
+		}
 		err := t.put(m)
 		if err != nil {
 			atomic.AddUint64(&t.messageCount, uint64(i))
