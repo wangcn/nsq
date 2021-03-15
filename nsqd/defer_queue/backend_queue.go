@@ -64,6 +64,7 @@ type backendQueue struct {
 	// run-time state (also persisted to disk)
 	readPos      int64
 	writePos     int64
+	writeBufPos  int64
 	readFileNum  int64
 	writeFileNum int64
 	depth        int64
@@ -86,10 +87,11 @@ type backendQueue struct {
 	nextReadPos     int64
 	nextReadFileNum int64
 
-	readFile  *os.File
-	writeFile *os.File
-	reader    *bufio.Reader
-	writeBuf  bytes.Buffer
+	readFile     *os.File
+	writeFile    *os.File
+	writeFileBuf *bufio.Writer
+	reader       *bufio.Reader
+	writeBuf     bytes.Buffer
 
 	// exposed via ReadChan()
 	readChan chan []byte
@@ -201,6 +203,8 @@ func (d *backendQueue) exit(deleted bool) error {
 	}
 
 	if d.writeFile != nil {
+		_ = d.writeFileBuf.Flush()
+		d.writeFileBuf = nil
 		_ = d.writeFile.Close()
 		d.writeFile = nil
 	}
@@ -260,6 +264,7 @@ func (d *backendQueue) skipToNextRWFile() error {
 
 	d.writeFileNum++
 	d.writePos = 0
+	d.writeBufPos = 0
 	d.readFileNum = d.writeFileNum
 	d.readPos = 0
 	d.nextReadFileNum = d.writeFileNum
@@ -364,6 +369,7 @@ func (d *backendQueue) writeOne(data []byte) error {
 				return err
 			}
 		}
+		d.writeFileBuf = bufio.NewWriter(d.writeFile)
 	}
 
 	dataLen := int32(len(data))
@@ -384,20 +390,22 @@ func (d *backendQueue) writeOne(data []byte) error {
 	}
 
 	// only write to the file once
-	_, err = d.writeFile.Write(d.writeBuf.Bytes())
+	_, err = d.writeFileBuf.Write(d.writeBuf.Bytes())
 	if err != nil {
+		d.writeFileBuf = nil
 		d.writeFile.Close()
 		d.writeFile = nil
 		return err
 	}
 
 	totalBytes := int64(4 + dataLen)
-	d.writePos += totalBytes
+	d.writeBufPos += totalBytes
 	atomic.AddInt64(&d.depth, 1)
 
-	if d.writePos >= d.maxBytesPerFile {
+	if d.writeBufPos >= d.maxBytesPerFile {
 		d.writeFileNum++
 		d.writePos = 0
+		d.writeBufPos = 0
 
 		// sync every time we start writing to a new file
 		err = d.sync()
@@ -406,6 +414,7 @@ func (d *backendQueue) writeOne(data []byte) error {
 		}
 
 		if d.writeFile != nil {
+			d.writeFileBuf = nil
 			d.writeFile.Close()
 			d.writeFile = nil
 		}
@@ -417,6 +426,7 @@ func (d *backendQueue) writeOne(data []byte) error {
 // sync fsyncs the current writeFile and persists metadata
 func (d *backendQueue) sync() error {
 	if d.writeFile != nil {
+		d.writeFileBuf.Flush()
 		err := d.writeFile.Sync()
 		if err != nil {
 			d.writeFile.Close()
@@ -457,6 +467,7 @@ func (d *backendQueue) retrieveMetaData() error {
 	atomic.StoreInt64(&d.depth, depth)
 	d.nextReadFileNum = d.readFileNum
 	d.nextReadPos = d.readPos
+	d.writeBufPos = d.writePos
 
 	return nil
 }
@@ -475,6 +486,7 @@ func (d *backendQueue) persistMetaData() error {
 		return err
 	}
 
+	d.writePos = d.writeBufPos
 	_, err = fmt.Fprintf(f, "%d\n%d,%d\n%d,%d\n",
 		atomic.LoadInt64(&d.depth),
 		d.readFileNum, d.readPos,

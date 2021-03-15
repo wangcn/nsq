@@ -2,9 +2,7 @@ package defer_queue
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"path"
@@ -30,7 +28,6 @@ type deliveryIndex struct {
 }
 
 func NewDeliveryIndex(name string, filePath string, logf AppLogFunc) (*deliveryIndex, error) {
-	var retErr error
 	var err error
 	logf(DEBUG, "NewDeliveryIndex %s %s", name, filePath)
 	ins := &deliveryIndex{
@@ -45,18 +42,19 @@ func NewDeliveryIndex(name string, filePath string, logf AppLogFunc) (*deliveryI
 		logf(ERROR, "BACKEND(%s) failed to retrieve deliveryIndex MetaData - %s", name, err)
 	}
 	err = ins.load()
-	if retErr == nil && err != nil {
-		retErr = err
+	if err != nil && !os.IsNotExist(err){
+		logf(ERROR, "BACKEND(%s) failed to load deliveryIndex - %s", name, err)
+		return nil, err
 	}
-	err = ins.prepareWrite()
-	if retErr == nil && err != nil {
-		retErr = err
-	}
-	return ins, retErr
+	return ins, nil
 }
 
 func (h *deliveryIndex) Start() {
 	// 单独启动同步循环。处理历史消息文件块时，不需要loopSync
+	err := h.prepareWrite()
+	if err != nil {
+		h.logf(ERROR, "BACKEND(%s) failed to prepare deliveryIndex - %s", h.name, err)
+	}
 	go h.loopSync()
 }
 
@@ -120,16 +118,18 @@ func (h *deliveryIndex) load() error {
 		return err
 	}
 	var msgID MessageID
+	item := make([]byte, MsgIDLength)
 	reader := bufio.NewReader(readFile)
 	for {
 		if readPos >= h.writePos {
 			break
 		}
-		err = binary.Read(reader, binary.BigEndian, &msgID)
+		_, err = reader.Read(item)
 		if err != nil {
-			log.Println("debug", "load delivery index err", err)
+			h.logf(DEBUG, "load delivery index err - %s", err)
 			break
 		}
+		copy(msgID[:], item)
 		h.index[msgID] = struct{}{}
 		readPos += MsgIDLength
 	}
@@ -162,6 +162,9 @@ func (h *deliveryIndex) Add(idx MessageID) error {
 	h.Lock()
 	defer h.Unlock()
 	var err error
+	if h.writeBuffer == nil {
+		return nil
+	}
 
 	h.index[idx] = struct{}{}
 	_, err = h.writeBuffer.Write(idx[:])

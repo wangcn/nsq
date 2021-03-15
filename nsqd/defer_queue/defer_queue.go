@@ -214,22 +214,20 @@ func (h *deferQueue) sendToTopic(msg *Message) {
 }
 
 func (h *deferQueue) gc() {
-	var lastStartTs int64
 	// gc last file
 	if h.lastStartTs != 0 {
-		lastStartTs = h.lastStartTs
-		h.pool.Remove(h.lastStartTs)
-		h.lastStartTs = 0
+		_, ok := h.pool.Get(h.lastStartTs)
+		if ok {
+			h.pool.Remove(h.lastStartTs)
+			h.logf(INFO, "gc backend queue %d(date: %s)", h.lastStartTs, time.Unix(h.lastStartTs, 0).Format("2006-01-02 15:04:05"))
+			h.needSync = true
+		}
 	}
 	// gc deliverIndex
 	if h.lastSentIndex != nil {
 		h.lastSentIndex.Close()
 		h.lastSentIndex.Remove()
 		h.lastSentIndex = nil
-	}
-	if lastStartTs > 0 {
-		h.needSync = true
-		h.logf(INFO, "gc backend queue %d", lastStartTs)
 	}
 }
 
@@ -241,17 +239,17 @@ func (h *deferQueue) selectBackend() {
 	nextStartTs := now - now%h.timeSeg
 	h.logf(DEBUG, "try to selectBackend. curTs: %d, nextTs: %d", h.curStartTs, nextStartTs)
 	if h.curStartTs < nextStartTs {
-		h.lastSentIndex = h.sentIndex
-		h.sentIndex = nil
 		curBlock, ok = h.pool.Get(h.curStartTs)
 		// 当前文件读完后，方可处理下一个
 		if ok && !curBlock.HasFinishedRead() {
 			return
 		}
+		h.lastSentIndex = h.sentIndex
+		h.sentIndex = nil
+		h.lastStartTs = h.curStartTs
 		nextBlock, ok = h.pool.Get(nextStartTs)
 		if ok {
 			h.logf(INFO, "selectBackend. curTs: %d, nextTs: %d", h.curStartTs, nextStartTs)
-			h.lastStartTs = h.curStartTs
 			h.curStartTs = nextStartTs
 			h.sentIndex, _ = NewDeliveryIndex(fmt.Sprintf("%d", h.curStartTs), path.Join(h.dataPath, h.subPath), h.logf)
 			h.sentIndex.Start()
