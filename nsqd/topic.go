@@ -185,6 +185,10 @@ func (t *Topic) PutMessage(m *Message) error {
 		return errors.New("exiting")
 	}
 	if m.deferred > 0 {
+		maxDeferredTime := t.nsqd.getOpts().MaxDeferredTime
+		if int64(m.deferred) > maxDeferredTime*int64(time.Second) {
+			m.deferred = time.Duration(maxDeferredTime) * time.Second
+		}
 		msg := defer_queue.Message{
 			ID:        defer_queue.MessageID(m.ID),
 			Body:      m.Body,
@@ -218,9 +222,12 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 	}
 
 	messageTotalBytes := 0
-
+	maxDeferredTime := t.nsqd.getOpts().MaxDeferredTime
 	for i, m := range msgs {
 		if m.deferred > 0 {
+			if int64(m.deferred) > maxDeferredTime*int64(time.Second) {
+				m.deferred = time.Duration(maxDeferredTime) * time.Second
+			}
 			msg := defer_queue.Message{
 				ID:        defer_queue.MessageID(m.ID),
 				Body:      m.Body,

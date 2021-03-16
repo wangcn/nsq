@@ -85,7 +85,8 @@ type Options struct {
 	SnappyEnabled   bool `flag:"snappy"`
 
 	// deferred msg
-	TimeSeg int64 `flag:"time-seg"`
+	TimeSeg         int64 `flag:"time-seg"`
+	MaxDeferredTime int64 `flag:"max-deferred-time"`
 }
 
 func NewOptions() *Options {
@@ -155,6 +156,7 @@ func NewOptions() *Options {
 
 		TLSMinVersion: tls.VersionTLS10,
 
-		TimeSeg: 1800,
+		TimeSeg:         1800,
+		MaxDeferredTime: 2592000, // 30 days
 	}
 }

@@ -176,6 +176,8 @@ func nsqdFlagSet(opts *nsqd.Options) *flag.FlagSet {
 
 	// deferred message
 	flagSet.Int64("time-seg", opts.TimeSeg, "the time span of a deferred message file block. DO NOT change it after deploying")
+	flagSet.Int64("max-deferred-time", opts.MaxDeferredTime, "max delay time of deferred msg.")
+
 
 	return flagSet
 }
