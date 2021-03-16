@@ -75,12 +75,13 @@ type backendQueue struct {
 	name            string
 	dataPath        string
 	maxBytesPerFile int64 // currently this cannot change once created
-	minMsgSize      int32
-	maxMsgSize      int32
+	minMsgSize      uint32
+	maxMsgSize      uint32
 	syncEvery       int64         // number of writes per fsync
 	syncTimeout     time.Duration // duration of time per fsync
 	exitFlag        int32
 	needSync        bool
+	bytes4          []byte // for en/decode int32
 
 	// keeps track of the position where we have read
 	// (but not yet sent over readChan)
@@ -110,7 +111,7 @@ type backendQueue struct {
 // New instantiates an instance of diskQueue, retrieving metadata
 // from the filesystem and starting the read ahead goroutine
 func NewBackend(deliverChan chan []byte, name string, dataPath string, maxBytesPerFile int64,
-	minMsgSize int32, maxMsgSize int32,
+	minMsgSize uint32, maxMsgSize uint32,
 	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) BackendInterface {
 	d := backendQueue{
 		name:              name,
@@ -128,6 +129,7 @@ func NewBackend(deliverChan chan []byte, name string, dataPath string, maxBytesP
 		syncEvery:         syncEvery,
 		syncTimeout:       syncTimeout,
 		logf:              logf,
+		bytes4:            make([]byte, 4),
 	}
 
 	// no need to lock here, nothing else could possibly be touching this instance
@@ -278,7 +280,7 @@ func (d *backendQueue) skipToNextRWFile() error {
 // while advancing read positions and rolling files, if necessary
 func (d *backendQueue) readOne() ([]byte, error) {
 	var err error
-	var msgSize int32
+	var msgSize uint32
 
 	if d.readFile == nil {
 		curFileName := d.fileName(d.readFileNum)
@@ -301,12 +303,13 @@ func (d *backendQueue) readOne() ([]byte, error) {
 		d.reader = bufio.NewReader(d.readFile)
 	}
 
-	err = binary.Read(d.reader, binary.BigEndian, &msgSize)
+	_, err = d.reader.Read(d.bytes4)
 	if err != nil {
 		_ = d.readFile.Close()
 		d.readFile = nil
 		return nil, err
 	}
+	msgSize = binary.BigEndian.Uint32(d.bytes4)
 
 	if msgSize < d.minMsgSize || msgSize > d.maxMsgSize {
 		// this file is corrupt and we have no reasonable guarantee on
@@ -372,14 +375,15 @@ func (d *backendQueue) writeOne(data []byte) error {
 		d.writeFileBuf = bufio.NewWriter(d.writeFile)
 	}
 
-	dataLen := int32(len(data))
+	dataLen := uint32(len(data))
 
 	if dataLen < d.minMsgSize || dataLen > d.maxMsgSize {
 		return fmt.Errorf("invalid message write size (%d) maxMsgSize=%d", dataLen, d.maxMsgSize)
 	}
 
 	d.writeBuf.Reset()
-	err = binary.Write(&d.writeBuf, binary.BigEndian, dataLen)
+	binary.BigEndian.PutUint32(d.bytes4, dataLen)
+	_, err = d.writeBuf.Write(d.bytes4)
 	if err != nil {
 		return err
 	}
@@ -582,6 +586,7 @@ func (d *backendQueue) handleReadError() {
 		}
 		d.writeFileNum++
 		d.writePos = 0
+		d.writeBufPos = 0
 	}
 
 	badFn := d.fileName(d.readFileNum)

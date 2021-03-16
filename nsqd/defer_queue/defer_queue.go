@@ -16,8 +16,8 @@ import (
 
 var (
 	Size100GB  = int64(100 * 1024 * 1024 * 1024)
-	SizeMinMsg = int32(10)
-	SizeMaxMsg = int32(100 * 1024 * 1024)
+	SizeMinMsg = uint32(10)
+	SizeMaxMsg = uint32(100 * 1024 * 1024)
 )
 
 type downStream struct {

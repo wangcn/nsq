@@ -91,3 +91,93 @@ func TestTimeWheel_RegCallback(t *testing.T) {
 
 	time.Sleep(4 * time.Second)
 }
+
+func TestTimeWheel_getPos(t *testing.T) {
+	tw := NewTimeWheel(time.Second, 60, logf)
+	assert.Equal(t, int64(64), tw.slotsNum)
+	assert.Equal(t, int64(63), tw.mask)
+	t.Log(tw.curPos)
+	tw.Start()
+	now := time.Now().UnixNano()
+	msg := Message{}
+	msg.Timestamp = now
+	msg.Deferred = int64(2 * time.Second)
+	assert.Equal(t, int64(2), tw.getPos(&msg))
+	msg.Deferred = int64(63 * time.Second)
+	assert.Equal(t, int64(63), tw.getPos(&msg))
+	msg.Deferred = int64(64 * time.Second)
+	assert.Equal(t, int64(0), tw.getPos(&msg))
+	msg.Deferred = int64(65 * time.Second)
+	assert.Equal(t, int64(1), tw.getPos(&msg))
+}
+
+func mod_1(n int64) int64 {
+	return n % 2048
+}
+
+func mod_2(n int64) int64 {
+	return n & 2047
+}
+
+func TestTimeWheel_mod(t *testing.T) {
+	for i := 0; i < 10000; i++ {
+		assert.Equal(t, mod_1(int64(i)), mod_2(int64(i)))
+	}
+}
+
+func BenchmarkTimeWheel_Mod(b *testing.B) {
+	b.StopTimer()
+	// ts := time.Now().Unix()
+	var ret int64
+	timeSeg := int64(2048)
+	normalTimeSeg := int64(1)
+	for {
+		if normalTimeSeg >= timeSeg {
+			break
+		}
+		normalTimeSeg += 1
+	}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		ret = 1 % normalTimeSeg
+	}
+	b.StopTimer()
+	modRet = ret
+}
+
+func BenchmarkTimeWheel_Mod2(b *testing.B) {
+	b.StopTimer()
+	ts := time.Now().Unix()
+	var ret int64
+	timeSeg := 1800
+	normalTimeSeg := 1
+	for {
+		if normalTimeSeg >= timeSeg {
+			break
+		}
+		normalTimeSeg <<= 1
+	}
+	normalTimeSeg--
+	// b.Log("normalTimeSeg is", normalTimeSeg)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		ret = ts & int64(normalTimeSeg)
+	}
+	b.StopTimer()
+	b.Log(ret)
+}
+
+var modRet int64
+
+func BenchmarkTimeWheel_Mod3(b *testing.B) {
+	b.StopTimer()
+	// ts := time.Now().Unix()
+	var ret int64
+	// b.Log("normalTimeSeg is", normalTimeSeg)
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		ret = mod_1(int64(i))
+	}
+	b.StopTimer()
+	modRet = ret
+}

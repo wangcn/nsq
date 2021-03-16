@@ -13,6 +13,7 @@ type TimeWheel struct {
 	slots       []*list.List
 	curPos      int64
 	slotsNum    int64
+	mask        int64
 	addChannel  chan Message
 	stopChannel chan bool
 
@@ -24,12 +25,25 @@ type TimeWheel struct {
 	logf AppLogFunc
 }
 
+func normalizeSlotsNum(slotsNum int64) int64 {
+	var normalNum int64 = 1
+	for {
+		if normalNum >= slotsNum {
+			break
+		}
+		normalNum <<= 1
+	}
+	return normalNum
+}
+
 func NewTimeWheel(interval time.Duration, slotsNum int64, logf AppLogFunc) *TimeWheel {
+	slotsNum = normalizeSlotsNum(slotsNum)
 	tw := &TimeWheel{
 		interval:    interval,
 		slots:       make([]*list.List, slotsNum),
 		curPos:      0,
 		slotsNum:    slotsNum,
+		mask:        slotsNum - 1,
 		addChannel:  make(chan Message),
 		stopChannel: make(chan bool),
 		logf:        logf,
@@ -119,5 +133,5 @@ func (h *TimeWheel) add(msg *Message) {
 
 func (h *TimeWheel) getPos(msg *Message) int64 {
 	gap := msg.Deferred / int64(time.Second)
-	return (gap + h.curPos) % h.slotsNum
+	return (gap + h.curPos) & h.mask
 }

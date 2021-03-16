@@ -23,6 +23,8 @@ func TestDiskQueue_Put(t *testing.T) {
 		-1, time.Second, dqLogf)
 	msg := []byte("wangfei123")
 	dq.Put(msg)
+	dq.Put(msg)
+	dq.Put(msg)
 	dq.Close()
 	return
 
@@ -32,7 +34,8 @@ func TestDiskQueue_ReadChan(t *testing.T) {
 	dq := NewBackend(nil, "1234", "__deferQ", 10000,
 		10, 1000,
 		-1, time.Second, dqLogf)
-	readChan := dq.ReadChan()
+	readChan := make(chan []byte)
+	dq.SetReadChan(readChan)
 	t.Log("readChan", string(<-readChan))
 	t.Log("readChan", string(<-readChan))
 	t.Log("readChan", string(<-readChan))

@@ -190,7 +190,7 @@ func TestDeferQueue_readTopic(t *testing.T) {
 	producer, err := nsq.NewProducer("127.0.0.1:4150", cfg)
 	assert.NoError(t, err)
 	for i := 1; i <= 25; i++ {
-		err = producer.DeferredPublish("test", time.Duration(i)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
+		err = producer.DeferredPublish("test", time.Duration(5)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
 		assert.NoError(t, err)
 	}
 	var count int64
