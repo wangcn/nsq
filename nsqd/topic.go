@@ -19,6 +19,8 @@ type Topic struct {
 	// 64bit atomic vars need to be first for proper alignment on 32bit platforms
 	messageCount uint64
 	messageBytes uint64
+	deferredMessageCount uint64
+	deferredMessageBytes uint64
 
 	sync.RWMutex
 
@@ -200,8 +202,8 @@ func (t *Topic) PutMessage(m *Message) error {
 		if err != nil {
 			return err
 		}
-		atomic.AddUint64(&t.messageCount, 1)
-		atomic.AddUint64(&t.messageBytes, uint64(len(m.Body)))
+		atomic.AddUint64(&t.deferredMessageCount, 1)
+		atomic.AddUint64(&t.deferredMessageBytes, uint64(len(m.Body)))
 		return nil
 	}
 	err := t.put(m)
@@ -237,8 +239,8 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 			}
 			err := t.nsqd.deferQueue.Put(&msg)
 			if err != nil {
-				atomic.AddUint64(&t.messageCount, uint64(i))
-				atomic.AddUint64(&t.messageBytes, uint64(messageTotalBytes))
+				atomic.AddUint64(&t.deferredMessageCount, uint64(i))
+				atomic.AddUint64(&t.deferredMessageBytes, uint64(messageTotalBytes))
 				return err
 			}
 			messageTotalBytes += len(m.Body)

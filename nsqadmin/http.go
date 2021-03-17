@@ -369,25 +369,29 @@ func (s *httpServer) nodeHandler(w http.ResponseWriter, req *http.Request, ps ht
 
 	var totalClients int64
 	var totalMessages int64
+	var totalDeferredMessages int64
 	for _, ts := range topicStats {
 		for _, cs := range ts.Channels {
 			totalClients += int64(len(cs.Clients))
 		}
 		totalMessages += ts.MessageCount
+		totalDeferredMessages += ts.DeferredMessageCount
 	}
 
 	return struct {
-		Node          string                    `json:"node"`
-		TopicStats    []*clusterinfo.TopicStats `json:"topics"`
-		TotalMessages int64                     `json:"total_messages"`
-		TotalClients  int64                     `json:"total_clients"`
-		Message       string                    `json:"message"`
+		Node                  string                    `json:"node"`
+		TopicStats            []*clusterinfo.TopicStats `json:"topics"`
+		TotalMessages         int64                     `json:"total_messages"`
+		TotalDeferredMessages int64                     `json:"total_deferred_messages"`
+		TotalClients          int64                     `json:"total_clients"`
+		Message               string                    `json:"message"`
 	}{
-		Node:          node,
-		TopicStats:    topicStats,
-		TotalMessages: totalMessages,
-		TotalClients:  totalClients,
-		Message:       maybeWarnMsg(messages),
+		Node:                  node,
+		TopicStats:            topicStats,
+		TotalMessages:         totalMessages,
+		TotalDeferredMessages: totalDeferredMessages,
+		TotalClients:          totalClients,
+		Message:               maybeWarnMsg(messages),
 	}, nil
 }
 

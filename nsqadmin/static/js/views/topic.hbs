@@ -58,6 +58,7 @@
             <th>Depth</th>
             <th>Memory + Disk</th>
             <th>Messages</th>
+            <th>Deferred Messages</th>
             {{#if graph_active}}<th>Rate</th>{{/if}}
             <th>Channels</th>
             {{#each e2e_processing_latency.percentiles}}
@@ -78,6 +79,7 @@
             <td>{{commafy depth}}</td>
             <td>{{commafy memory_depth}} + {{commafy backend_depth}}</td>
             <td>{{commafy message_count}}</td>
+            <td>{{commafy deferred_message_count}}</td>
             {{#if ../graph_active}}
                 <td class="bold rate" target="{{rate "topic" node topic_name ""}}"></td>
             {{/if}}
@@ -98,6 +100,7 @@
                 <td><a href="{{large_graph "topic" node topic_name "" "message_count"}}"><img width="120" src="{{sparkline "topic" node topic_name "" "message_count"}}"></a></td>
                 <td></td>
                 <td></td>
+                <td></td>
                 {{#if e2e_processing_latency.percentiles.length}}
                 <td colspan="{{e2e_processing_latency.percentiles.length}}">
                     <a href="{{large_graph "e2e" node e2e_processing_latency "" "e2e_processing_latency"}}"><img width="120" height="20"  src="{{sparkline "e2e" node e2e_processing_latency "" "e2e_processing_latency"}}"></a>
@@ -111,6 +114,7 @@
             <td>{{commafy depth}}</td>
             <td>{{commafy memory_depth}} + {{commafy backend_depth}}</td>
             <td>{{commafy message_count}}</td>
+            <td>{{commafy deferred_message_count}}</td>
             {{#if graph_active}}<td class="bold rate" target="{{rate "topic" "*" topic_name ""}}"></td>{{/if}}
             <td>{{commafy channels.length}}</td>
             {{#if e2e_processing_latency.percentiles.length}}
@@ -127,6 +131,7 @@
                 <td><a href="{{large_graph "topic" "*" topic_name "" "depth"}}"><img width="120" src="{{sparkline "topic" node topic_name "" "depth"}}"></a></td>
                 <td></td>
                 <td><a href="{{large_graph "topic" "*" topic_name "" "message_count"}}"><img width="120" src="{{sparkline "topic" node topic_name "" "message_count"}}"></a></td>
+                <td></td>
                 <td></td>
                 <td></td>
                 {{#if e2e_processing_latency.percentiles.length}}

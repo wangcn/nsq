@@ -553,12 +553,13 @@ func (s *httpServer) printStats(stats Stats, ms *memStats, health string, startT
 		} else {
 			pausedPrefix = "   "
 		}
-		fmt.Fprintf(w, "\n%s[%-15s] depth: %-5d be-depth: %-5d msgs: %-8d e2e%%: %s\n",
+		fmt.Fprintf(w, "\n%s[%-15s] depth: %-5d be-depth: %-5d msgs: %-8d dmsgs: %-8d e2e%%: %s\n",
 			pausedPrefix,
 			t.TopicName,
 			t.Depth,
 			t.BackendDepth,
 			t.MessageCount,
+			t.DeferredMessageCount,
 			t.E2eProcessingLatency,
 		)
 		for _, c := range t.Channels {

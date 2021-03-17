@@ -18,26 +18,30 @@ type ClientStats interface {
 }
 
 type TopicStats struct {
-	TopicName    string         `json:"topic_name"`
-	Channels     []ChannelStats `json:"channels"`
-	Depth        int64          `json:"depth"`
-	BackendDepth int64          `json:"backend_depth"`
-	MessageCount uint64         `json:"message_count"`
-	MessageBytes uint64         `json:"message_bytes"`
-	Paused       bool           `json:"paused"`
+	TopicName            string         `json:"topic_name"`
+	Channels             []ChannelStats `json:"channels"`
+	Depth                int64          `json:"depth"`
+	BackendDepth         int64          `json:"backend_depth"`
+	MessageCount         uint64         `json:"message_count"`
+	MessageBytes         uint64         `json:"message_bytes"`
+	DeferredMessageCount uint64         `json:"deferred_message_count"`
+	DeferredMessageBytes uint64         `json:"deferred_message_bytes"`
+	Paused               bool           `json:"paused"`
 
 	E2eProcessingLatency *quantile.Result `json:"e2e_processing_latency"`
 }
 
 func NewTopicStats(t *Topic, channels []ChannelStats) TopicStats {
 	return TopicStats{
-		TopicName:    t.name,
-		Channels:     channels,
-		Depth:        t.Depth(),
-		BackendDepth: t.backend.Depth(),
-		MessageCount: atomic.LoadUint64(&t.messageCount),
-		MessageBytes: atomic.LoadUint64(&t.messageBytes),
-		Paused:       t.IsPaused(),
+		TopicName:            t.name,
+		Channels:             channels,
+		Depth:                t.Depth(),
+		BackendDepth:         t.backend.Depth(),
+		MessageCount:         atomic.LoadUint64(&t.messageCount),
+		MessageBytes:         atomic.LoadUint64(&t.messageBytes),
+		DeferredMessageCount: atomic.LoadUint64(&t.deferredMessageCount),
+		DeferredMessageBytes: atomic.LoadUint64(&t.deferredMessageBytes),
+		Paused:               t.IsPaused(),
 
 		E2eProcessingLatency: t.AggregateChannelE2eProcessingLatency().Result(),
 	}

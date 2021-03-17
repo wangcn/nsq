@@ -92,16 +92,17 @@ func (p *Producer) IsInconsistent(numLookupd int) bool {
 }
 
 type TopicStats struct {
-	Node         string          `json:"node"`
-	Hostname     string          `json:"hostname"`
-	TopicName    string          `json:"topic_name"`
-	Depth        int64           `json:"depth"`
-	MemoryDepth  int64           `json:"memory_depth"`
-	BackendDepth int64           `json:"backend_depth"`
-	MessageCount int64           `json:"message_count"`
-	NodeStats    []*TopicStats   `json:"nodes"`
-	Channels     []*ChannelStats `json:"channels"`
-	Paused       bool            `json:"paused"`
+	Node                 string          `json:"node"`
+	Hostname             string          `json:"hostname"`
+	TopicName            string          `json:"topic_name"`
+	Depth                int64           `json:"depth"`
+	MemoryDepth          int64           `json:"memory_depth"`
+	BackendDepth         int64           `json:"backend_depth"`
+	MessageCount         int64           `json:"message_count"`
+	DeferredMessageCount int64           `json:"deferred_message_count"`
+	NodeStats            []*TopicStats   `json:"nodes"`
+	Channels             []*ChannelStats `json:"channels"`
+	Paused               bool            `json:"paused"`
 
 	E2eProcessingLatency *quantile.E2eProcessingLatencyAggregate `json:"e2e_processing_latency"`
 }
@@ -112,6 +113,7 @@ func (t *TopicStats) Add(a *TopicStats) {
 	t.MemoryDepth += a.MemoryDepth
 	t.BackendDepth += a.BackendDepth
 	t.MessageCount += a.MessageCount
+	t.DeferredMessageCount += a.DeferredMessageCount
 	if a.Paused {
 		t.Paused = a.Paused
 	}
