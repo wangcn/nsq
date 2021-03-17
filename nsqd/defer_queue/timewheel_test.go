@@ -111,6 +111,26 @@ func TestTimeWheel_getPos(t *testing.T) {
 	assert.Equal(t, int64(1), tw.getPos(&msg))
 }
 
+func TestTimeWheel_getPos2(t *testing.T) {
+	tw := NewTimeWheel(time.Second, 10, logf)
+	assert.Equal(t, int64(16), tw.slotsNum)
+	assert.Equal(t, int64(15), tw.mask)
+	tw.Start()
+	tw.curPos = 9
+	t.Log(tw.curPos)
+	now := time.Now().UnixNano()
+	msg := Message{}
+	msg.Timestamp = now
+	msg.Deferred = int64(2 * time.Second)
+	assert.Equal(t, int64(11), tw.getPos(&msg))
+	msg.Deferred = int64(63 * time.Second)
+	assert.Equal(t, int64(8), tw.getPos(&msg))
+	msg.Deferred = int64(64 * time.Second)
+	assert.Equal(t, int64(9), tw.getPos(&msg))
+	msg.Deferred = int64(65 * time.Second)
+	assert.Equal(t, int64(10), tw.getPos(&msg))
+}
+
 func mod_1(n int64) int64 {
 	return n % 2048
 }

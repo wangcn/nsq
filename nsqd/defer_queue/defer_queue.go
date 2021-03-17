@@ -52,7 +52,7 @@ type deferQueue struct {
 	downStreamPool map[string]diskqueue.Interface
 	// downStreamRegChan     chan downStream
 	downStreamDeRegChan   chan string
-	downStreamDeliverChan chan Message
+	// downStreamDeliverChan chan Message
 	downStreamLock        sync.RWMutex
 
 	timeSeg     int64
@@ -87,7 +87,7 @@ func NewDeferQueue(dataPath string, timeSeg int64, logger *Logger) DeferQueueInt
 		downStreamPool: make(map[string]diskqueue.Interface),
 		// downStreamRegChan:     make(chan downStream),
 		downStreamDeRegChan:   make(chan string),
-		downStreamDeliverChan: make(chan Message),
+		// downStreamDeliverChan: make(chan Message),
 
 		timeSeg: timeSeg,
 
@@ -147,18 +147,11 @@ func (h *deferQueue) ioLoop() {
 			h.writeResponseChan <- h.writeOne(&dataWrite)
 		// case downStreamIns := <-h.downStreamRegChan:
 		// 	h.downStreamPool[downStreamIns.name] = downStreamIns.Interface
-		case topicName := <-h.downStreamDeRegChan:
-			h.logf(INFO, "deleting defer down stream: %s", topicName)
-			delete(h.downStreamPool, topicName)
-		case msg := <-h.downStreamDeliverChan:
-			h.sendToTopic(&msg)
-		// case <-syncTicker.C:
-		// 	h.selectBackend()
-		// 	if count == 0 {
-		// 		// avoid sync when there's no activity
-		// 		continue
-		// 	}
-		// 	h.needSync = true
+		// case topicName := <-h.downStreamDeRegChan:
+		// 	h.logf(INFO, "deleting defer down stream: %s", topicName)
+		// 	delete(h.downStreamPool, topicName)
+		// case msg := <-h.downStreamDeliverChan:
+		// 	h.sendToTopic(&msg)
 		case <-gcTicker.C:
 			h.selectBackend()
 			h.gc()
@@ -178,6 +171,7 @@ func (h *deferQueue) dispatch(dataRead []byte) {
 	deferred := msg.Timestamp + msg.Deferred - time.Now().UnixNano()
 	// 单位为纳秒。不足一秒时，直接投递。
 	if deferred > int64(time.Second) {
+		msg.Deferred = deferred
 		err := h.tw.AddMessage(&msg)
 		if err != nil {
 			h.logf(ERROR, "time wheel insert failed - %s", err)
@@ -188,7 +182,7 @@ func (h *deferQueue) dispatch(dataRead []byte) {
 }
 
 func (h *deferQueue) twCallback(msg *Message) {
-	h.downStreamDeliverChan <- *msg
+	h.sendToTopic(msg)
 }
 
 func (h *deferQueue) sendToTopic(msg *Message) {
@@ -353,7 +347,10 @@ func (h *deferQueue) Close() error {
 
 	h.logf(INFO, "DEFER_QUEUE is closing")
 
-	h.readChan = nil
+	close(h.exitChan)
+	// ensure that ioLoop has exited
+	<-h.exitSyncChan
+
 	err = h.pool.Close()
 	if err != nil {
 		h.logf(ERROR, "close defer backend pool failed. err is %s", err)
@@ -362,9 +359,6 @@ func (h *deferQueue) Close() error {
 	if h.sentIndex != nil {
 		h.sentIndex.Close()
 	}
-	close(h.exitChan)
-	// ensure that ioLoop has exited
-	<-h.exitSyncChan
 
 	return nil
 }
@@ -380,8 +374,13 @@ func (h *deferQueue) RegDownStream(topicName string, dq diskqueue.Interface) {
 }
 
 func (h *deferQueue) DeRegDownStream(topicName string) {
-	h.downStreamDeRegChan <- topicName
+	// h.downStreamDeRegChan <- topicName
+	h.logf(INFO, "deleting defer down stream: %s", topicName)
+	h.downStreamLock.Lock()
+	delete(h.downStreamPool, topicName)
+	h.downStreamLock.Unlock()
 }
+
 
 func (h *deferQueue) calcCurStartTs() int64 {
 	now := time.Now().Unix()

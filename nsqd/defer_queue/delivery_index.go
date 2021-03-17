@@ -21,7 +21,7 @@ type deliveryIndex struct {
 	syncTick *time.Ticker
 	stopChan chan int
 
-	sync.Mutex
+	sync.RWMutex
 	needSync bool
 
 	logf AppLogFunc
@@ -205,15 +205,18 @@ func (h *deliveryIndex) sync() {
 }
 
 func (h *deliveryIndex) Exists(idx MessageID) bool {
+	h.RLock()
 	_, ok := h.index[idx]
+	h.RUnlock()
 	return ok
 }
 
 func (h *deliveryIndex) Close() error {
 	h.stopChan <- 1
-	h.persistMetaData()
 	h.writeBuffer.Flush()
 	h.writeFile.Sync()
+	h.persistMetaData()
+	h.index = nil
 	return h.writeFile.Close()
 }
 
@@ -222,6 +225,7 @@ func (h *deliveryIndex) Remove() error {
 		h.writeBuffer.Flush()
 		h.writeFile.Sync()
 		h.writeFile.Close()
+		h.index = nil
 	}
 	os.Remove(h.getMetaFileName())
 	return os.Remove(h.getFileName())

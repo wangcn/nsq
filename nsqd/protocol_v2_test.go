@@ -46,6 +46,7 @@ func mustStartNSQD(opts *Options) (*net.TCPAddr, *net.TCPAddr, *NSQD) {
 		panic(err)
 	}
 	go func() {
+		nsqd.LoadMetadata()
 		err := nsqd.Main()
 		if err != nil {
 			panic(err)

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -15,6 +14,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/judwhite/go-svc"
 	"github.com/mreiferson/go-options"
+
 	"github.com/nsqio/nsq/internal/lg"
 	"github.com/nsqio/nsq/internal/version"
 	"github.com/nsqio/nsq/nsqd"
@@ -28,7 +28,7 @@ type program struct {
 func main() {
 	prg := &program{}
 	// SIGTERM handling is in Start()
-	if err := svc.Run(prg, syscall.SIGINT); err != nil {
+	if err := svc.Run(prg, syscall.SIGINT, syscall.SIGTERM); err != nil {
 		logFatal("%s", err)
 	}
 }
@@ -81,16 +81,16 @@ func (p *program) Start() error {
 		logFatal("failed to persist metadata - %s", err)
 	}
 
-	signalChan := make(chan os.Signal, 1)
-	go func() {
-		// range over all term signals
-		// we don't want to un-register our sigterm handler which would
-		// cause default go behavior to apply
-		for range signalChan {
-			p.nsqd.TermSignal()
-		}
-	}()
-	signal.Notify(signalChan, syscall.SIGTERM)
+	// signalChan := make(chan os.Signal, 1)
+	// go func() {
+	// 	// range over all term signals
+	// 	// we don't want to un-register our sigterm handler which would
+	// 	// cause default go behavior to apply
+	// 	for range signalChan {
+	// 		p.nsqd.TermSignal()
+	// 	}
+	// }()
+	// signal.Notify(signalChan, syscall.SIGTERM)
 
 	go func() {
 		err := p.nsqd.Main()

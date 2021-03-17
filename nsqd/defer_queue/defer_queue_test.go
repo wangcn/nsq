@@ -189,8 +189,8 @@ func TestDeferQueue_readTopic(t *testing.T) {
 	cfg.MaxAttempts = 5
 	producer, err := nsq.NewProducer("127.0.0.1:4150", cfg)
 	assert.NoError(t, err)
-	for i := 1; i <= 25; i++ {
-		err = producer.DeferredPublish("test", time.Duration(5)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
+	for i := 1; i <= 3; i++ {
+		err = producer.DeferredPublish("test", time.Duration(3)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
 		assert.NoError(t, err)
 	}
 	var count int64
@@ -220,13 +220,14 @@ func TestDeferQueue_readTopic2(t *testing.T) {
 	start := time.Now()
 	var sendCount int64
 	for {
-		err = producer.DeferredPublish("test", time.Duration(5)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
+		err = producer.DeferredPublish("test", time.Duration(15)*time.Second, []byte(time.Now().Format("2006-01-02 15:04:05")))
 		assert.NoError(t, err)
 		sendCount++
-		if time.Since(start) > 1*time.Second {
+		if time.Since(start) > 3*time.Second {
 			break
 		}
 	}
+	t.Log("sendCount", sendCount)
 
 	var count int64
 	// consumer

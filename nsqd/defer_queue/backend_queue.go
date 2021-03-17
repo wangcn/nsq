@@ -95,7 +95,8 @@ type backendQueue struct {
 	writeBuf     bytes.Buffer
 
 	// exposed via ReadChan()
-	readChan chan []byte
+	readChan     chan []byte
+	readChanLock sync.RWMutex
 
 	// internal channels
 	writeChan         chan []byte
@@ -104,6 +105,9 @@ type backendQueue struct {
 	emptyResponseChan chan error
 	exitChan          chan int
 	exitSyncChan      chan int
+
+	checkFinishChan     chan struct{}
+	checkFinishRespChan chan bool
 
 	logf AppLogFunc
 }
@@ -114,22 +118,24 @@ func NewBackend(deliverChan chan []byte, name string, dataPath string, maxBytesP
 	minMsgSize uint32, maxMsgSize uint32,
 	syncEvery int64, syncTimeout time.Duration, logf AppLogFunc) BackendInterface {
 	d := backendQueue{
-		name:              name,
-		dataPath:          dataPath,
-		maxBytesPerFile:   maxBytesPerFile,
-		minMsgSize:        minMsgSize,
-		maxMsgSize:        maxMsgSize,
-		readChan:          deliverChan,
-		writeChan:         make(chan []byte),
-		writeResponseChan: make(chan error),
-		emptyChan:         make(chan int),
-		emptyResponseChan: make(chan error),
-		exitChan:          make(chan int),
-		exitSyncChan:      make(chan int),
-		syncEvery:         syncEvery,
-		syncTimeout:       syncTimeout,
-		logf:              logf,
-		bytes4:            make([]byte, 4),
+		name:                name,
+		dataPath:            dataPath,
+		maxBytesPerFile:     maxBytesPerFile,
+		minMsgSize:          minMsgSize,
+		maxMsgSize:          maxMsgSize,
+		readChan:            deliverChan,
+		writeChan:           make(chan []byte),
+		writeResponseChan:   make(chan error),
+		emptyChan:           make(chan int),
+		emptyResponseChan:   make(chan error),
+		exitChan:            make(chan int),
+		exitSyncChan:        make(chan int),
+		checkFinishChan:     make(chan struct{}),
+		checkFinishRespChan: make(chan bool),
+		syncEvery:           syncEvery,
+		syncTimeout:         syncTimeout,
+		logf:                logf,
+		bytes4:              make([]byte, 4),
 	}
 
 	// no need to lock here, nothing else could possibly be touching this instance
@@ -303,7 +309,7 @@ func (d *backendQueue) readOne() ([]byte, error) {
 		d.reader = bufio.NewReader(d.readFile)
 	}
 
-	_, err = d.reader.Read(d.bytes4)
+	_, err = io.ReadFull(d.reader, d.bytes4)
 	if err != nil {
 		_ = d.readFile.Close()
 		d.readFile = nil
@@ -643,7 +649,9 @@ func (d *backendQueue) ioLoop() {
 		}
 
 		// 控制deferQueue是否读取该文件
+		d.readChanLock.RLock()
 		if d.readChan != nil {
+			d.readChanLock.RUnlock()
 			if (d.readFileNum < d.writeFileNum) || (d.readPos < d.writePos) {
 				if d.nextReadPos == d.readPos {
 					dataRead, err = d.readOne()
@@ -658,6 +666,8 @@ func (d *backendQueue) ioLoop() {
 			} else {
 				r = nil
 			}
+		} else {
+			d.readChanLock.RUnlock()
 		}
 
 		select {
@@ -673,8 +683,9 @@ func (d *backendQueue) ioLoop() {
 		case dataWrite := <-d.writeChan:
 			count++
 			d.writeResponseChan <- d.writeOne(dataWrite)
+		case <-d.checkFinishChan:
+			d.checkFinishRespChan <- d.checkFinish()
 		case <-syncTicker.C:
-			// log.Println(d.name, "syncTicker")
 			if count == 0 {
 				// avoid sync when there's no activity
 				continue
@@ -690,18 +701,6 @@ exit:
 	syncTicker.Stop()
 	d.exitSyncChan <- 1
 }
-
-// func (d *backendQueue) DeleteIfExpire() error {
-// 	log.Println("hhhhhhhhhhh", d.readPos, d.writePos)
-// 	if d.writePos == 0 {
-// 		return nil
-// 	}
-// 	if d.readPos == d.writePos && time.Now().Unix() > d.expireAt {
-// 		d.Empty()
-// 		return d.Delete()
-// 	}
-// 	return errors.New("forbid deleting")
-// }
 
 // Scan read all records for clearing history
 func (d *backendQueue) Scan() ([]byte, error) {
@@ -722,9 +721,16 @@ func (d *backendQueue) Scan() ([]byte, error) {
 }
 
 func (d *backendQueue) SetReadChan(readChan chan []byte) {
+	d.readChanLock.Lock()
 	d.readChan = readChan
+	d.readChanLock.Unlock()
 }
 
 func (d *backendQueue) HasFinishedRead() bool {
+	d.checkFinishChan <- struct{}{}
+	return <-d.checkFinishRespChan
+}
+
+func (d *backendQueue) checkFinish() bool {
 	return d.readFileNum == d.writeFileNum && d.readPos == d.writePos
 }

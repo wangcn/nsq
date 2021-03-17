@@ -324,6 +324,7 @@ func (n *NSQD) LoadMetadata() error {
 		return err
 	}
 	if data == nil {
+		n.startDeferQueue()
 		return nil // fresh start
 	}
 
