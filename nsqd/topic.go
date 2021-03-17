@@ -186,7 +186,7 @@ func (t *Topic) PutMessage(m *Message) error {
 	}
 	if m.deferred > 0 {
 		maxDeferredTime := t.nsqd.getOpts().MaxDeferredTime
-		if int64(m.deferred) > maxDeferredTime*int64(time.Second) {
+		if m.deferred > time.Duration(maxDeferredTime)*time.Second {
 			m.deferred = time.Duration(maxDeferredTime) * time.Second
 		}
 		msg := defer_queue.Message{
@@ -225,7 +225,7 @@ func (t *Topic) PutMessages(msgs []*Message) error {
 	maxDeferredTime := t.nsqd.getOpts().MaxDeferredTime
 	for i, m := range msgs {
 		if m.deferred > 0 {
-			if int64(m.deferred) > maxDeferredTime*int64(time.Second) {
+			if m.deferred > time.Duration(maxDeferredTime)*time.Second {
 				m.deferred = time.Duration(maxDeferredTime) * time.Second
 			}
 			msg := defer_queue.Message{
