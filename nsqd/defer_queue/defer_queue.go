@@ -51,7 +51,7 @@ type deferQueue struct {
 
 	downStreamPool map[string]diskqueue.Interface
 	// downStreamRegChan     chan downStream
-	downStreamDeRegChan   chan string
+	// downStreamDeRegChan   chan string
 	// downStreamDeliverChan chan Message
 	downStreamLock        sync.RWMutex
 
@@ -86,7 +86,7 @@ func NewDeferQueue(dataPath string, timeSeg int64, logger *Logger) DeferQueueInt
 
 		downStreamPool: make(map[string]diskqueue.Interface),
 		// downStreamRegChan:     make(chan downStream),
-		downStreamDeRegChan:   make(chan string),
+		// downStreamDeRegChan:   make(chan string),
 		// downStreamDeliverChan: make(chan Message),
 
 		timeSeg: timeSeg,
