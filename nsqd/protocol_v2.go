@@ -886,11 +886,10 @@ func (p *protocolV2) DPUB(client *clientV2, params [][]byte) ([]byte, error) {
 	}
 	timeoutDuration := time.Duration(timeoutMs) * time.Millisecond
 
-	// if timeoutDuration < 0 || timeoutDuration > p.nsqd.getOpts().MaxReqTimeout {
-	// 	return nil, protocol.NewFatalClientErr(nil, "E_INVALID",
-	// 		fmt.Sprintf("DPUB timeout %d out of range 0-%d",
-	// 			timeoutMs, p.nsqd.getOpts().MaxReqTimeout/time.Millisecond))
-	// }
+	if timeoutDuration < 0 {
+		return nil, protocol.NewFatalClientErr(nil, "E_INVALID",
+			fmt.Sprintf("DPUB timeout %d out of range 0-inf", timeoutMs))
+	}
 
 	bodyLen, err := readLen(client.Reader, client.lenSlice)
 	if err != nil {
