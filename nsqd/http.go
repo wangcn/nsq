@@ -13,11 +13,14 @@ import (
 	"os"
 	"reflect"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+
+	"github.com/nsqio/nsq/internal/clusterinfo"
 	"github.com/nsqio/nsq/internal/http_api"
 	"github.com/nsqio/nsq/internal/lg"
 	"github.com/nsqio/nsq/internal/protocol"
@@ -60,6 +63,7 @@ func newHTTPServer(nsqd *NSQD, tlsEnabled bool, tlsRequired bool) *httpServer {
 	router.Handle("POST", "/pub", http_api.Decorate(s.doPUB, http_api.V1))
 	router.Handle("POST", "/mpub", http_api.Decorate(s.doMPUB, http_api.V1))
 	router.Handle("GET", "/stats", http_api.Decorate(s.doStats, log, http_api.V1))
+	router.Handle("GET", "/deferredStats", http_api.Decorate(s.doDeferredStats, log, http_api.V1))
 
 	// only v1
 	router.Handle("POST", "/topic/create", http_api.Decorate(s.doCreateTopic, log, http_api.V1))
@@ -661,4 +665,47 @@ func getOptByCfgName(opts interface{}, name string) (interface{}, bool) {
 		return val.FieldByName(field.Name).Interface(), true
 	}
 	return nil, false
+}
+
+func (s *httpServer) doDeferredStats(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
+	reqParams, err := http_api.NewReqParams(req)
+	if err != nil {
+		s.nsqd.logf(LOG_ERROR, "failed to parse request params - %s", err)
+		return nil, http_api.Err{400, "INVALID_REQUEST"}
+	}
+	formatString, _ := reqParams.Get("format")
+	jsonFormat := formatString == "json"
+
+	stats := s.nsqd.GetDeferredStats()
+
+	if !jsonFormat {
+		return s.printDeferredStats(stats), nil
+	}
+
+	return stats, nil
+}
+
+func (s *httpServer) printDeferredStats(stats *clusterinfo.DeferredStats) []byte {
+	var buf bytes.Buffer
+	w := &buf
+
+	var depthList clusterinfo.DeferredDepthList
+	for _, v := range stats.Depth {
+		depthList = append(depthList, v)
+	}
+
+	sort.Sort(depthList)
+
+	fmt.Fprintf(w, "%s\n", version.String("nsqd"))
+	fmt.Fprintf(w, "delivery_rc %d\n", stats.DeliveryRC)
+
+	for _, t := range depthList {
+		fmt.Fprintf(w, "\nstart_at: %-5s\tdepth: %-5d",
+			t.StartAt,
+			t.Depth,
+		)
+	}
+	fmt.Fprintf(w, "\n")
+
+	return buf.Bytes()
 }

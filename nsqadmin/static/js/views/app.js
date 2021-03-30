@@ -17,10 +17,14 @@ var LookupView = require('./lookup');
 var NodesView = require('./nodes');
 var NodeView = require('./node');
 var CounterView = require('./counter');
+var DeferredCountView = require('./deferred_count')
+var DeferredNodeCountView = require('./deferred_node_count')
 
 var Node = require('../models/node'); //eslint-disable-line no-undef
 var Topic = require('../models/topic');
 var Channel = require('../models/channel');
+var DeferredCount = require('../models/deferred_count');
+var DeferredNodeCount = require('../models/deferred_node_count');
 
 var AppView = BaseView.extend({
     // not a fan of setting a view's el to an existing element on the page
@@ -42,6 +46,8 @@ var AppView = BaseView.extend({
         this.listenTo(Pubsub, 'nodes:show', this.showNodes);
         this.listenTo(Pubsub, 'node:show', this.showNode);
         this.listenTo(Pubsub, 'counter:show', this.showCounter);
+        this.listenTo(Pubsub, 'deferredCount:show', this.showDeferredCount);
+        this.listenTo(Pubsub, 'deferredNodeCount:show', this.showDeferredNodeCount);
 
         this.listenTo(Pubsub, 'view:ready', function() {
             $('.rate').each(function(i, el) {
@@ -134,6 +140,20 @@ var AppView = BaseView.extend({
     showCounter: function() {
         this.showView(function() {
             return new CounterView();
+        });
+    },
+
+    showDeferredCount: function(node) {
+        this.showView(function() {
+            var model = new DeferredCount({'name': node});
+            return new DeferredCountView({'model':model});
+        });
+    },
+
+    showDeferredNodeCount: function() {
+        this.showView(function() {
+            var model = new DeferredNodeCount();
+            return new DeferredNodeCountView({'model':model});
         });
     },
 

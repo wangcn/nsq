@@ -7,6 +7,7 @@ apps/nsqd/nsqd
 apps/nsqadmin/nsqadmin
 bench/bench_reader/bench_reader
 bench/bench_writer/bench_writer
+bench/bench_writer_defer/bench_writer_defer
 bench/bench_channels/bench_channels
 apps/nsq_to_nsq/nsq_to_nsq
 apps/nsq_to_file/nsq_to_file

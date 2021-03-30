@@ -1,0 +1,38 @@
+{{> warning}}
+{{> error}}
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>Time Segments ({{deferred_depth.length}})</h2>
+    </div>
+</div>
+
+<ol class="breadcrumb">
+    <li><a class="link" href="{{basePath "/deferredNodeCount"}}">Nodes</a>
+    <li class="active">{{name}}</li>
+</ol>
+
+<div class="row">
+    <div class="col-md-12">
+        <table class="table table-condensed table-bordered table-hover">
+            <tr class="info">
+                <th style="width: 15%">delivery_rc</th>
+                <th>{{delivery_rc}}</th>
+            </tr>
+            <tr class="info">
+                <th>total</th>
+                <th>{{total}}</th>
+            </tr>
+            <tr>
+                <th>StartAt</th>
+                <th>Count</th>
+            </tr>
+            {{#each deferred_depth}}
+                <tr>
+                    <td>{{start_at}}</td>
+                    <td>{{depth}}</td>
+                </tr>
+            {{/each}}
+        </table>
+    </div>
+</div>

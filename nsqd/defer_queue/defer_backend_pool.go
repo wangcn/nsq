@@ -11,6 +11,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,8 @@ type deferBackendPool struct {
 	subPath  string
 
 	logf AppLogFunc
+
+	sync.RWMutex
 }
 
 func newDeferBackendPool(dataPath string, logf AppLogFunc) *deferBackendPool {
@@ -83,8 +86,12 @@ func (h *deferBackendPool) newDiskQueue(startTs int64, logf AppLogFunc) BackendI
 }
 
 func (h *deferBackendPool) Create(startTs int64, logf AppLogFunc) BackendInterface {
+	h.Lock()
+	defer h.Unlock()
 	if h.linkList.Len() == 0 {
 		h.linkList.PushBack(startTs)
+	} else if startTs < h.linkList.Front().Value.(int64) {
+		h.linkList.PushFront(startTs)
 	} else {
 		for e := h.linkList.Front(); e != nil; e = e.Next() {
 			ts := e.Value.(int64)
@@ -95,17 +102,21 @@ func (h *deferBackendPool) Create(startTs int64, logf AppLogFunc) BackendInterfa
 		}
 	}
 	q := h.newDiskQueue(startTs, logf)
-	h.logf(DEBUG, "create backend %d", startTs)
+	h.logf(INFO, "create backend %d", startTs)
 	h.data[startTs] = q
 	return q
 }
 
 func (h *deferBackendPool) Get(startTs int64) (queue BackendInterface, ok bool) {
+	h.RLock()
 	queue, ok = h.data[startTs]
+	h.RUnlock()
 	return
 }
 
 func (h *deferBackendPool) Remove(startTs int64) {
+	h.Lock()
+	defer h.Unlock()
 	if _, ok := h.data[startTs]; ok {
 		h.data[startTs].Empty()
 		h.data[startTs].Delete()
@@ -163,18 +174,20 @@ func (h *deferBackendPool) Persist(fName string) error {
 }
 
 func (h *deferBackendPool) AllStartPoint() []int64 {
+	h.RLock()
 	tsList := make([]int64, 0, h.linkList.Len())
 	for e := h.linkList.Front(); e != nil; e = e.Next() {
 		ts := e.Value.(int64)
 		tsList = append(tsList, ts)
 	}
+	h.RUnlock()
 	return tsList
 }
 
 func (h *deferBackendPool) Close() error {
 	var err error
 	for _, q := range h.data {
-		err1 :=  q.Close()
+		err1 := q.Close()
 		if err1 != nil {
 			err = err1
 		}

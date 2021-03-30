@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/blang/semver"
+
 	"github.com/nsqio/nsq/internal/http_api"
 	"github.com/nsqio/nsq/internal/lg"
 	"github.com/nsqio/nsq/internal/stringy"
@@ -903,4 +904,115 @@ func (c *ClusterInfo) producersPOST(pl Producers, uri string, qs string) error {
 		return ErrList(errs)
 	}
 	return nil
+}
+
+func (c *ClusterInfo) GetNSQDDeferredStats(producers Producers, selectedNode string) (*DeferredStatsList, error) {
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+	var errs []error
+
+	stats := &DeferredStats{
+		Node:       "",
+		DeliveryRC: 0,
+		Depth:      make(map[int64]*DeferredDepth),
+	}
+
+	for _, p := range producers {
+		wg.Add(1)
+		go func(p *Producer) {
+			defer wg.Done()
+
+			addr := p.HTTPAddress()
+
+			endpoint := fmt.Sprintf("http://%s/deferredStats?format=json", addr)
+			if selectedNode != "" && selectedNode != addr {
+				return
+			}
+
+			c.logf("CI: querying nsqd %s", endpoint)
+
+			var resp DeferredStats
+			err := c.client.GETV1(endpoint, &resp)
+			lock.Lock()
+			defer lock.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+				return
+			}
+			stats.Add(&resp)
+		}(p)
+	}
+	wg.Wait()
+
+	if len(errs) == len(producers) {
+		return nil, fmt.Errorf("Failed to query any nsqd: %s", ErrList(errs))
+	}
+
+	ret := &DeferredStatsList{
+		Node:       "",
+		DeliveryRC: 0,
+		DepthList:  nil,
+	}
+
+	ret.Node = stats.Node
+	ret.DeliveryRC = stats.DeliveryRC
+	for _, v := range stats.Depth {
+		ret.DepthList = append(ret.DepthList, v)
+	}
+
+	sort.Sort(ret.DepthList)
+
+	if len(errs) > 0 {
+		return ret, ErrList(errs)
+	}
+	return ret, nil
+}
+
+func (c *ClusterInfo) GetNSQDDeferredNodeStats(producers Producers) ([]DeferredNodeStats, error) {
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+	var errs []error
+
+	stats := make([]DeferredNodeStats, 0)
+
+	for _, p := range producers {
+		wg.Add(1)
+		go func(p *Producer) {
+			defer wg.Done()
+
+			addr := p.HTTPAddress()
+
+			endpoint := fmt.Sprintf("http://%s/deferredStats?format=json", addr)
+
+			c.logf("CI: querying nsqd %s", endpoint)
+
+			var resp DeferredStats
+			err := c.client.GETV1(endpoint, &resp)
+			lock.Lock()
+			defer lock.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+				return
+			}
+			var totalDepth int64
+			for _, v := range resp.Depth {
+				totalDepth += v.Depth
+			}
+			stats = append(stats, DeferredNodeStats{
+				Node:       resp.Node,
+				DeliveryRC: resp.DeliveryRC,
+				TotalDepth: totalDepth,
+			})
+		}(p)
+	}
+	wg.Wait()
+
+	if len(errs) == len(producers) {
+		return nil, fmt.Errorf("Failed to query any nsqd: %s", ErrList(errs))
+	}
+
+	if len(errs) > 0 {
+		return nil, ErrList(errs)
+	}
+	return stats, nil
 }

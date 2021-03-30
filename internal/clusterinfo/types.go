@@ -306,3 +306,47 @@ type ProducersByHost struct {
 func (c ProducersByHost) Less(i, j int) bool {
 	return c.Producers[i].Hostname < c.Producers[j].Hostname
 }
+
+type DeferredNodeStats struct {
+	Node       string `json:"node"`
+	DeliveryRC int64  `json:"delivery_rc"`
+	TotalDepth int64  `json:"total_depth"`
+}
+
+type DeferredDepth struct {
+	StartAt string `json:"start_at"`
+	Depth   int64  `json:"depth"`
+}
+
+type DeferredStats struct {
+	Node       string
+	DeliveryRC int64
+	Depth      map[int64]*DeferredDepth
+}
+
+func (h *DeferredStats) Add(a *DeferredStats) {
+	h.Node = "*"
+	for aStartAt, aStats := range a.Depth {
+		if v, ok := h.Depth[aStartAt]; ok {
+			v.Depth += aStats.Depth
+		} else {
+			h.Depth[aStartAt] = &DeferredDepth{
+				StartAt: a.Depth[aStartAt].StartAt,
+				Depth:   a.Depth[aStartAt].Depth,
+			}
+		}
+	}
+	h.DeliveryRC += a.DeliveryRC
+}
+
+type DeferredDepthList []*DeferredDepth
+
+func (c DeferredDepthList) Len() int           { return len(c) }
+func (c DeferredDepthList) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c DeferredDepthList) Less(i, j int) bool { return c[i].StartAt < c[j].StartAt }
+
+type DeferredStatsList struct {
+	Node       string
+	DeliveryRC int64
+	DepthList  DeferredDepthList
+}

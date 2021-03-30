@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+
 	"github.com/nsqio/nsq/internal/clusterinfo"
 	"github.com/nsqio/nsq/internal/http_api"
 	"github.com/nsqio/nsq/internal/lg"
@@ -79,6 +80,8 @@ func NewHTTPServer(nsqadmin *NSQAdmin) *httpServer {
 	}
 
 	router.Handle("GET", bp("/"), http_api.Decorate(s.indexHandler, log))
+	router.Handle("GET", bp("/deferredCount"), http_api.Decorate(s.indexHandler, log))
+	router.Handle("GET", bp("/deferredNodeCount"), http_api.Decorate(s.indexHandler, log))
 	router.Handle("GET", bp("/ping"), http_api.Decorate(s.pingHandler, log, http_api.PlainText))
 
 	router.Handle("GET", bp("/topics"), http_api.Decorate(s.indexHandler, log))
@@ -98,6 +101,8 @@ func NewHTTPServer(nsqadmin *NSQAdmin) *httpServer {
 	}
 
 	// v1 endpoints
+	router.Handle("GET", bp("/api/deferredCount"), http_api.Decorate(s.deferredCountHandler, log, http_api.V1))
+	router.Handle("GET", bp("/api/deferredNodeCount"), http_api.Decorate(s.deferredNodeCountHandler, log, http_api.V1))
 	router.Handle("GET", bp("/api/topics"), http_api.Decorate(s.topicsHandler, log, http_api.V1))
 	router.Handle("GET", bp("/api/topics/:topic"), http_api.Decorate(s.topicHandler, log, http_api.V1))
 	router.Handle("GET", bp("/api/topics/:topic/:channel"), http_api.Decorate(s.channelHandler, log, http_api.V1))
@@ -824,4 +829,87 @@ func getOptByCfgName(opts interface{}, name string) (interface{}, bool) {
 		return val.FieldByName(field.Name).Interface(), true
 	}
 	return nil, false
+}
+
+func (s *httpServer) deferredCountHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
+	var messages []string
+	var producer clusterinfo.Producers
+	var err error
+	var stats *clusterinfo.DeferredStatsList
+
+	reqParams, err := http_api.NewReqParams(req)
+	if err != nil {
+		return nil, http_api.Err{Code: 400, Text: err.Error()}
+	}
+	if len(s.nsqadmin.getOpts().NSQLookupdHTTPAddresses) != 0 {
+		producer, err = s.ci.GetLookupdProducers(s.nsqadmin.getOpts().NSQLookupdHTTPAddresses)
+	} else {
+		producer, err = s.ci.GetNSQDProducers(s.nsqadmin.getOpts().NSQDHTTPAddresses)
+	}
+	if err != nil {
+		pe, ok := err.(clusterinfo.PartialErr)
+		if !ok {
+			s.nsqadmin.logf(LOG_ERROR, "failed to get topics - %s", err)
+			return nil, http_api.Err{Code: 502, Text: fmt.Sprintf("UPSTREAM_ERROR: %s", err)}
+		}
+		s.nsqadmin.logf(LOG_WARN, "%s", err)
+		messages = append(messages, pe.Error())
+	}
+
+	node, _ := reqParams.Get("node")
+	stats, err = s.ci.GetNSQDDeferredStats(producer, node)
+
+	if err != nil {
+		s.nsqadmin.logf(LOG_WARN, "%s", err)
+		messages = append(messages, err.Error())
+	}
+
+	return struct {
+		Node          string                       `json:"node"`
+		DeliveryRC    int64                        `json:"delivery_rc"`
+		DeferredDepth []*clusterinfo.DeferredDepth `json:"deferred_depth"`
+		Message       string                       `json:"message"`
+	}{
+		Node:          stats.Node,
+		DeliveryRC:    stats.DeliveryRC,
+		DeferredDepth: stats.DepthList,
+		Message:       maybeWarnMsg(messages),
+	}, nil
+}
+
+func (s *httpServer) deferredNodeCountHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) (interface{}, error) {
+	var messages []string
+	var producer clusterinfo.Producers
+	var err error
+	var stats []clusterinfo.DeferredNodeStats
+
+	if len(s.nsqadmin.getOpts().NSQLookupdHTTPAddresses) != 0 {
+		producer, err = s.ci.GetLookupdProducers(s.nsqadmin.getOpts().NSQLookupdHTTPAddresses)
+	} else {
+		producer, err = s.ci.GetNSQDProducers(s.nsqadmin.getOpts().NSQDHTTPAddresses)
+	}
+	if err != nil {
+		pe, ok := err.(clusterinfo.PartialErr)
+		if !ok {
+			s.nsqadmin.logf(LOG_ERROR, "failed to get topics - %s", err)
+			return nil, http_api.Err{Code: 502, Text: fmt.Sprintf("UPSTREAM_ERROR: %s", err)}
+		}
+		s.nsqadmin.logf(LOG_WARN, "%s", err)
+		messages = append(messages, pe.Error())
+	}
+
+	stats, err = s.ci.GetNSQDDeferredNodeStats(producer)
+
+	if err != nil {
+		s.nsqadmin.logf(LOG_WARN, "%s", err)
+		messages = append(messages, err.Error())
+	}
+
+	return struct {
+		DeferredNodeStats []clusterinfo.DeferredNodeStats `json:"deferred_node_stats"`
+		Message           string                          `json:"message"`
+	}{
+		DeferredNodeStats: stats,
+		Message:           maybeWarnMsg(messages),
+	}, nil
 }

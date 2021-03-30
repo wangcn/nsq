@@ -1,0 +1,32 @@
+{{> warning}}
+{{> error}}
+
+<div class="row">
+    <div class="col-md-12">
+        <h2>Nodes ({{deferred_node_stats.length}})</h2>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <table class="table table-condensed table-bordered table-hover">
+            <tr class="info">
+                <th style="width: 15%">total</th>
+                <th style="width: 15%">{{total_delivery_rc}}</th>
+                <th>{{total_depth}}</th>
+            </tr>
+            <tr>
+                <th>Node</th>
+                <th>Delivery RC</th>
+                <th>Depth</th>
+            </tr>
+            {{#each deferred_node_stats}}
+                <tr>
+                    <td><a href="/deferredCount?node={{node}}">{{node}}</a></td>
+                    <td>{{delivery_rc}}</td>
+                    <td>{{total_depth}}</td>
+                </tr>
+            {{/each}}
+        </table>
+    </div>
+</div>

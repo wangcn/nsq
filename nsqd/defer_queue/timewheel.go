@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type TimeWheel struct {
 	mask        int64
 	addChannel  chan Message
 	stopChannel chan bool
+	total       int64
 
 	callback func(msg *Message)
 
@@ -98,6 +100,7 @@ func (h *TimeWheel) scanAndDispatch(l *list.List) {
 
 		next := e.Next()
 		l.Remove(e)
+		atomic.AddInt64(&h.total, -1)
 		e = next
 	}
 }
@@ -127,6 +130,7 @@ func (h *TimeWheel) RegCallback(fn func(msg *Message)) {
 }
 
 func (h *TimeWheel) add(msg *Message) {
+	atomic.AddInt64(&h.total, 1)
 	pos := h.getPos(msg)
 	h.slots[pos].PushBack(msg)
 }
@@ -134,4 +138,8 @@ func (h *TimeWheel) add(msg *Message) {
 func (h *TimeWheel) getPos(msg *Message) int64 {
 	gap := msg.Deferred / int64(time.Second)
 	return (gap + h.curPos) & h.mask
+}
+
+func (h *TimeWheel) Count() int64 {
+	return atomic.LoadInt64(&h.total)
 }

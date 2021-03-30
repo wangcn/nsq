@@ -1,10 +1,14 @@
 package nsqd
 
 import (
+	"net"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync/atomic"
+	"time"
 
+	"github.com/nsqio/nsq/internal/clusterinfo"
 	"github.com/nsqio/nsq/internal/quantile"
 )
 
@@ -218,4 +222,23 @@ func getMemStats() memStats {
 		ms.NumGC,
 	}
 
+}
+
+func (n *NSQD) GetDeferredStats() *clusterinfo.DeferredStats {
+	stats := &clusterinfo.DeferredStats{
+		Depth: make(map[int64]*clusterinfo.DeferredDepth),
+	}
+
+	depthInfo := n.deferQueue.Depth()
+	stats.Node = n.getOpts().BroadcastAddress
+	stats.Node = net.JoinHostPort(n.getOpts().BroadcastAddress, strconv.Itoa(n.RealHTTPAddr().Port))
+	stats.DeliveryRC = depthInfo.TimeWheelCount
+	for _, item := range depthInfo.Depth {
+		stats.Depth[item.StartAtTS] = &clusterinfo.DeferredDepth{
+			StartAt: time.Unix(item.StartAtTS, 0).Format("2006-01-02 15:04:05"),
+			Depth:   item.Depth,
+		}
+	}
+
+	return stats
 }

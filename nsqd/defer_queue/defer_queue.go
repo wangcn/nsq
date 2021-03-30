@@ -25,12 +25,23 @@ type downStream struct {
 	diskqueue.Interface
 }
 
+type BackendDepth struct {
+	StartAtTS int64
+	Depth     int64
+}
+
+type DepthInfo struct {
+	TimeWheelCount int64
+	Depth          []BackendDepth
+}
+
 type DeferQueueInterface interface {
 	Start()
 	Put(message *Message) error
 	Close() error
 	RegDownStream(topicName string, dq diskqueue.Interface)
 	DeRegDownStream(topicName string)
+	Depth() DepthInfo
 }
 
 type deferQueue struct {
@@ -363,4 +374,21 @@ func (h *deferQueue) DeRegDownStream(topicName string) {
 func (h *deferQueue) calcCurStartTs() int64 {
 	now := time.Now().Unix()
 	return now - now%h.timeSeg
+}
+
+func (h *deferQueue) Depth() DepthInfo {
+	var info DepthInfo
+	allStartAt := h.pool.AllStartPoint()
+	for _, ts := range allStartAt {
+		q, ok := h.pool.Get(ts)
+		if !ok {
+			continue
+		}
+		info.Depth = append(info.Depth, BackendDepth{
+			StartAtTS: ts,
+			Depth:     q.Depth(),
+		})
+	}
+	info.TimeWheelCount = h.tw.Count()
+	return info
 }
